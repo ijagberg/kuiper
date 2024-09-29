@@ -16,17 +16,10 @@ pub struct Request {
     uri: String,
     headers: Headers,
     params: Value,
+    method: String,
 }
 
 impl Request {
-    pub fn new(uri: String, headers: Headers, params: Value) -> Self {
-        Self {
-            uri,
-            headers,
-            params,
-        }
-    }
-
     fn add_header_if_not_exists(&mut self, header_name: String, header_value: String) {
         if let Entry::Vacant(vacant_entry) = self.headers.entry(header_name) {
             vacant_entry.insert(header_value);
@@ -54,7 +47,7 @@ pub fn evaluate_requests(path: PathBuf) -> Requests {
     requests
 }
 
-fn evaluate_dir(path: PathBuf, mut headers: Headers, env: Env) -> Requests {
+fn evaluate_dir(path: PathBuf, mut headers: Headers, _env: Env) -> Requests {
     // look for a header file in the dir
     read_headers(path.join("headers"), &mut headers);
 
@@ -121,7 +114,13 @@ mod tests {
             .unwrap();
 
         // the get_user request should have headers from parent directory
-        assert!(get_user.headers.contains_key("header_name_1"));
-        assert!(get_user.headers.contains_key("header_name_2"));
+        let header = get_user.headers.get("base_header_name_1").unwrap();
+        assert_eq!(header, "base_header_value_1");
+        let header = get_user.headers.get("base_header_name_2").unwrap();
+        assert_eq!(header, "users_specific_value");
+        let header = get_user.headers.get("users_specific_header_name").unwrap();
+        assert_eq!(header, "asd");
+        let header = get_user.headers.get("request_specific_header_1").unwrap();
+        assert_eq!(header, "request_specific_header_value_1");
     }
 }

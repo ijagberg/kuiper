@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use clap::Parser;
-use kuiper_lib::Request;
+use kuiper_lib::{KuiperError, Request};
 use reqwest::Method;
 
 #[derive(clap::Parser)]
@@ -9,10 +9,10 @@ struct Args {
     request_name: String,
 }
 
-fn main() {
+fn main() -> Result<(), KuiperError> {
     let args = Args::parse();
 
-    let requests = kuiper_lib::evaluate_requests("requests".into());
+    let requests = kuiper_lib::evaluate_requests("requests".into())?;
 
     if let Some(request) = requests.get(&args.request_name) {
         println!("{:#?}", request);
@@ -20,6 +20,8 @@ fn main() {
     } else {
         eprintln!("could not find request with name '{}'", args.request_name);
     }
+
+    Ok(())
 }
 
 fn send_request(req: &Request) {

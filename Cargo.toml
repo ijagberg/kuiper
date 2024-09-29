@@ -6,7 +6,7 @@ edition = "2021"
 authors = ["Isak Jägberg <ijagberg@gmail.com>"]
 license = "MIT"
 keywords = ["postman", "integration", "requests"]
-categories = ["http"]
+categories = ["command-line-utilities", "development-tools::testing"]
 repository = "https://github.com/ijagberg/kuiper"
 homepage = "https://github.com/ijagberg/kuiper"
 

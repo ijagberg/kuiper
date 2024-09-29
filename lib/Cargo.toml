@@ -1,0 +1,16 @@
+[package]
+name = "kuiper-lib"
+description = "An easy-to-use HTTP integration testing tool"
+version = "0.0.1"
+edition = "2021"
+authors = ["Isak Jägberg <ijagberg@gmail.com>"]
+license = "MIT"
+keywords = ["postman", "integration", "requests"]
+categories = ["command-line-utilities", "development-tools::testing"]
+repository = "https://github.com/ijagberg/kuiper"
+homepage = "https://github.com/ijagberg/kuiper"
+
+
+[dependencies]
+serde = { version = "1.0.210", features = ["derive"] }
+serde_json = "1.0.128"

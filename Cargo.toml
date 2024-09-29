@@ -1,14 +1,3 @@
-[package]
-name = "kuiper"
-description = "An easy-to-use HTTP integration testing tool"
-version = "0.0.1"
-edition = "2021"
-authors = ["Isak Jägberg <ijagberg@gmail.com>"]
-license = "MIT"
-keywords = ["postman", "integration", "requests"]
-categories = ["command-line-utilities", "development-tools::testing"]
-repository = "https://github.com/ijagberg/kuiper"
-homepage = "https://github.com/ijagberg/kuiper"
-
-
-[dependencies]
+[workspace]
+members = ["lib", "cli"]
+resolver = "2"

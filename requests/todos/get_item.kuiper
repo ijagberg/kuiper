@@ -1,0 +1,15 @@
+{
+  "uri": "${{base_uri}}/api/todos/{item_id}",
+  "method": "GET",
+  "params": {
+    "route": {
+      "user_id": "${{item_id}}"
+    },
+    "query": {
+      "format": "json"
+    }
+  },
+  "headers": {
+    "request_specific_header_1": "request_specific_header_value_2"
+  }
+}

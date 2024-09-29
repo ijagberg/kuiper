@@ -102,25 +102,48 @@ mod tests {
 
         println!("{}", serde_json::to_string_pretty(&requests).unwrap());
 
-        let get_user = requests
-            .iter()
-            .find_map(|(k, v)| {
-                if k.ends_with("get_user.kuiper") {
-                    Some(v)
-                } else {
-                    None
-                }
-            })
-            .unwrap();
+        {
+            let get_user = requests
+                .iter()
+                .find_map(|(k, v)| {
+                    if k.ends_with("get_user.kuiper") {
+                        Some(v)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap();
 
-        // the get_user request should have headers from parent directory
-        let header = get_user.headers.get("base_header_name_1").unwrap();
-        assert_eq!(header, "base_header_value_1");
-        let header = get_user.headers.get("base_header_name_2").unwrap();
-        assert_eq!(header, "users_specific_value");
-        let header = get_user.headers.get("users_specific_header_name").unwrap();
-        assert_eq!(header, "asd");
-        let header = get_user.headers.get("request_specific_header_1").unwrap();
-        assert_eq!(header, "request_specific_header_value_1");
+            // the get_user request should have headers from parent directory
+            let header = get_user.headers.get("base_header_name_1").unwrap();
+            assert_eq!(header, "base_header_value_1");
+            let header = get_user.headers.get("base_header_name_2").unwrap();
+            assert_eq!(header, "users_specific_value");
+            let header = get_user.headers.get("users_specific_header_name").unwrap();
+            assert_eq!(header, "asd");
+            let header = get_user.headers.get("request_specific_header_1").unwrap();
+            assert_eq!(header, "request_specific_header_value_1");
+        }
+
+        {
+            let get_item = requests
+                .iter()
+                .find_map(|(k, v)| {
+                    if k.ends_with("get_item.kuiper") {
+                        Some(v)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap();
+
+            // the get_user request should have headers from parent directory
+            let header = get_item.headers.get("base_header_name_1").unwrap();
+            assert_eq!(header, "base_header_value_1");
+            let header = get_item.headers.get("base_header_name_2").unwrap();
+            assert_eq!(header, "base_header_value_2");
+            let header = get_item.headers.get("request_specific_header_1").unwrap();
+            assert_eq!(header, "request_specific_header_value_2");
+        }
     }
 }

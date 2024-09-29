@@ -4,11 +4,41 @@ use std::{
     collections::{hash_map::Entry, HashMap},
     error::Error,
     fmt::Display,
-    fs,
+    fs::{self, File},
+    io::BufReader,
     path::PathBuf,
 };
 
-pub type Requests = HashMap<String, Request>;
+pub struct Requests {
+    root: String,
+    requests: HashMap<String, Request>,
+}
+
+impl Requests {
+    pub fn evaluate(root: &str) -> KuiperResult<Self> {
+        let map = evaluate_dir(root.into(), Headers::new(), Env::new())?;
+        let stripped_map = map
+            .into_iter()
+            .map(|(key, value)| {
+                if let Some(key) = key.strip_prefix(root) {
+                    (key.to_owned(), value)
+                } else {
+                    (key, value)
+                }
+            })
+            .collect();
+
+        Ok(Requests {
+            root: root.to_string(),
+            requests: stripped_map,
+        })
+    }
+
+    pub fn get(&self, request_name: &str) -> Option<&Request> {
+        self.requests.get(request_name)
+    }
+}
+
 pub type Headers = HashMap<String, String>;
 pub type Env = HashMap<String, String>;
 pub type KuiperResult<T> = Result<T, KuiperError>;
@@ -42,11 +72,11 @@ impl Request {
     }
 }
 
-pub fn evaluate_requests(path: PathBuf) -> KuiperResult<Requests> {
-    evaluate_dir(path, Headers::new(), Env::new())
-}
-
-fn evaluate_dir(path: PathBuf, mut headers: Headers, _env: Env) -> KuiperResult<Requests> {
+fn evaluate_dir(
+    path: PathBuf,
+    mut headers: Headers,
+    _env: Env,
+) -> KuiperResult<HashMap<String, Request>> {
     // look for a header file in the dir
     read_headers(path.join("headers.json"), &mut headers)?;
 
@@ -62,14 +92,16 @@ fn evaluate_dir(path: PathBuf, mut headers: Headers, _env: Env) -> KuiperResult<
         } else if let Some(ext) = path.extension() {
             if ext == "kuiper" {
                 println!("found request: {:?}", path);
-                let file_contents = fs::read_to_string(&path)?;
-                let mut request: Request = serde_json::from_str(&file_contents)?;
+                let file = File::open(&path)?;
+                let reader = BufReader::new(file);
+
+                let mut request: Request = serde_json::from_reader(reader)?;
                 // insert headers
                 for (header_name, header_value) in headers.clone() {
                     request.add_header_if_not_exists(header_name, header_value);
                 }
                 requests.insert(
-                    path.file_name().unwrap().to_str().unwrap().to_owned(), // TODO: this looks like shit
+                    path.to_str().unwrap().to_owned(), // TODO: this looks like shit
                     request,
                 );
             }
@@ -133,9 +165,12 @@ mod tests {
     fn evaluate_test_dir() {
         let dir = "../requests";
 
-        let requests = evaluate_requests(dir.into()).unwrap();
+        let requests = Requests::evaluate(dir.into()).unwrap();
 
-        println!("{}", serde_json::to_string_pretty(&requests).unwrap());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&requests.requests).unwrap()
+        );
 
         {
             // `request_in_root.kuiper` should have headers from `requests/`

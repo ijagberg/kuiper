@@ -12,7 +12,7 @@ struct Args {
 fn main() -> Result<(), KuiperError> {
     let args = Args::parse();
 
-    let requests = kuiper_lib::evaluate_requests("requests".into())?;
+    let requests = kuiper_lib::Requests::evaluate("requests")?;
 
     if let Some(request) = requests.get(&args.request_name) {
         println!("{:#?}", request);

@@ -3,7 +3,7 @@
   "method": "GET",
   "params": {
     "route": {
-      "user_id": "${{item_id}}"
+      "item_id": "${{item_id}}"
     },
     "query": {
       "format": "json"

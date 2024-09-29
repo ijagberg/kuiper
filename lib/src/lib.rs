@@ -6,17 +6,18 @@ use std::{
     path::PathBuf,
 };
 
-pub type Requests = HashMap<PathBuf, Request>;
+pub type Requests = HashMap<String, Request>;
 pub type Headers = HashMap<String, String>;
 pub type Env = HashMap<String, String>;
 pub type KuiperResult<T> = Result<T, &'static str>;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Request {
     uri: String,
     headers: Headers,
     params: Value,
     method: String,
+    body: Option<Vec<u8>>,
 }
 
 impl Request {
@@ -25,26 +26,38 @@ impl Request {
             vacant_entry.insert(header_value);
         }
     }
+
+    pub fn method(&self) -> &str {
+        &self.method
+    }
+
+    pub fn uri(&self) -> &str {
+        &self.uri
+    }
+
+    pub fn headers(&self) -> &Headers {
+        &self.headers
+    }
 }
 
 pub fn evaluate_requests(path: PathBuf) -> Requests {
-    let mut headers = Headers::new();
+    // let mut headers = Headers::new();
 
-    read_headers(path.join("headers"), &mut headers);
+    // read_headers(path.join("headers"), &mut headers);
 
-    let mut requests = Requests::new();
+    // let mut requests = Requests::new();
 
-    for entry in fs::read_dir(&path).unwrap() {
-        let entry = entry.expect("entry in ReadDir should exist");
-        if entry.path().is_dir() {
-            let dir_requests = evaluate_dir(entry.path(), headers.clone(), Env::new());
-            for (name, value) in dir_requests {
-                requests.insert(name, value);
-            }
-        }
-    }
+    // for entry in fs::read_dir(&path).unwrap() {
+    //     let entry = entry.expect("entry in ReadDir should exist");
+    //     if entry.path().is_dir() {
+    //         let dir_requests = evaluate_dir(entry.path(), headers.clone(), Env::new());
+    //         for (name, value) in dir_requests {
+    //             requests.insert(name, value);
+    //         }
+    //     }
+    // }
 
-    requests
+    evaluate_dir(path, Headers::new(), Env::new())
 }
 
 fn evaluate_dir(path: PathBuf, mut headers: Headers, _env: Env) -> Requests {
@@ -56,8 +69,13 @@ fn evaluate_dir(path: PathBuf, mut headers: Headers, _env: Env) -> Requests {
     for entry in fs::read_dir(path).expect("path given to evaluate_dir should exist") {
         let entry = entry.expect("entry in ReadDir should exist");
         let path = entry.path();
-        if let Some(ext) = path.extension() {
+        if path.is_dir() {
+            for (name, value) in evaluate_dir(path, headers.clone(), _env.clone()) {
+                requests.insert(name, value);
+            }
+        } else if let Some(ext) = path.extension() {
             if ext == "kuiper" {
+                println!("found request: {:?}", path);
                 let file_contents =
                     fs::read_to_string(&path).expect("entry in ReadDir should exist");
                 let mut request: Request =
@@ -66,7 +84,10 @@ fn evaluate_dir(path: PathBuf, mut headers: Headers, _env: Env) -> Requests {
                 for (header_name, header_value) in headers.clone() {
                     request.add_header_if_not_exists(header_name, header_value);
                 }
-                requests.insert(path, request);
+                requests.insert(
+                    path.file_name().unwrap().to_str().unwrap().to_owned(),
+                    request,
+                );
             }
         }
     }

@@ -137,7 +137,6 @@ mod tests {
                 })
                 .unwrap();
 
-            // the get_user request should have headers from parent directory
             let header = get_item.headers.get("base_header_name_1").unwrap();
             assert_eq!(header, "base_header_value_1");
             let header = get_item.headers.get("base_header_name_2").unwrap();

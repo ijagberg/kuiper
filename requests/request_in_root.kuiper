@@ -2,5 +2,7 @@
   "uri": "http://www.example.com",
   "method": "GET",
   "params": {},
-  "headers": {}
+  "headers": {
+    "root_header_3": null
+  }
 }

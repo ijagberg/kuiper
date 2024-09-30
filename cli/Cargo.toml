@@ -13,4 +13,4 @@ homepage = "https://github.com/ijagberg/kuiper"
 [dependencies]
 clap = { version = "4.5.18", features = ["derive"] }
 kuiper-lib = { version = "0.0.1", path = "../lib" }
-reqwest = { version = "0.12.7", features = ["blocking"] }
+reqwest = { version = "0.12.7", features = ["blocking", "json"] }

@@ -1,14 +1,7 @@
 {
-  "uri": "${{base_uri}}/api/user/{user_id}",
+  "uri": "http://localhost/api/user/{user_id}",
   "method": "GET",
-  "params": {
-    "route": {
-      "user_id": "${{user_id}}"
-    },
-    "query": {
-      "format": "json"
-    }
-  },
+  "params": {},
   "headers": {
     "request_specific_header_1": "request_specific_header_value_1"
   }

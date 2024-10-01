@@ -23,7 +23,8 @@ pub struct Request {
 }
 
 impl Request {
-    pub fn find(path: PathBuf) -> KuiperResult<Self> {
+    pub fn find(path: impl Into<PathBuf>) -> KuiperResult<Self> {
+        let path: PathBuf = path.into();
         trace!("finding request at '{path:?}");
         if !path.is_relative() {
             return Err(KuiperError::PathError);
@@ -101,10 +102,9 @@ impl Request {
 }
 
 fn overwrite_headers(path: &Path, headers: &mut Headers) -> KuiperResult<()> {
-    match File::open(&path) {
+    match File::open(path) {
         Ok(file) => {
             let reader = BufReader::new(file);
-
             let file_headers: Headers = serde_json::from_reader(reader)?;
             for (name, value) in file_headers {
                 // TODO: handle interpolation
@@ -130,10 +130,6 @@ fn interpolate(input: &str) -> KuiperResult<String> {
         let interpolated_name = &input[start_idx + 3..start_idx + end_idx];
         let interpolated_value =
             std::env::var(interpolated_name).map_err(|_| KuiperError::InterpolationError)?;
-        // println!(
-        //     "in '{}', found interpolation '{}', replacing with value '{}'",
-        //     input, interpolated_name, interpolated_value
-        // );
         result = result.replace(
             &input[start_idx..start_idx + end_idx + 2],
             &interpolated_value,
@@ -163,10 +159,10 @@ impl Display for KuiperError {
             match self {
                 KuiperError::IoError(error) => format!("I/O error: {error}"),
                 KuiperError::JsonError(error) => format!("JSON error: {error}"),
-                KuiperError::RequestNotFound => format!("request not found"),
-                KuiperError::InterpolationError => format!("interpolation error"),
-                KuiperError::FileFormatError => format!("file format error"),
-                KuiperError::PathError => format!("path error"),
+                KuiperError::RequestNotFound => "request not found".to_string(),
+                KuiperError::InterpolationError => "interpolation error".to_string(),
+                KuiperError::FileFormatError => "file format error".to_string(),
+                KuiperError::PathError => "path error".to_string(),
             }
         )
     }
@@ -188,6 +184,20 @@ impl From<serde_json::Error> for KuiperError {
 mod tests {
     use super::*;
     use std::path::Path;
+    use test_log::test;
+
+    fn assert_headers_eq(left: &Headers, right: &Headers) {
+        assert_eq!(left.len(), right.len());
+        for (left_key, left_value) in left {
+            let (right_key, right_value) = right.get_key_value(left_key).unwrap();
+            assert_eq!(left_key, right_key);
+            assert_eq!(
+                left_value, right_value,
+                "headers differ at key '{}', left: '{:?}', right: '{:?}'",
+                left_key, left_value, right_value
+            );
+        }
+    }
 
     #[test]
     fn ancestors_rev_test() {
@@ -199,5 +209,42 @@ mod tests {
             reversed,
             vec![Path::new("x"), Path::new("x/y"), Path::new("x/y/z"),]
         );
+    }
+
+    #[test]
+    fn root_request_test() {
+        let request = Request::find("../requests/request_in_root.kuiper").unwrap();
+        assert_eq!(request.uri(), "http://www.example.com");
+        let expected_headers: Headers = [
+            ("root_header_1", Some("root_value_1")),
+            ("root_header_2", Some("root_value_2")),
+            ("root_header_3", None),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.map(|s| s.to_string())))
+        .collect();
+
+        assert_headers_eq(request.headers(), &expected_headers);
+    }
+
+    #[test]
+    fn subdir_request_test() {
+        let request = Request::find("../requests/subdir/request_in_subdir.kuiper").unwrap();
+        assert_eq!(request.uri(), "http://localhost/api/user/{user_id}");
+        let expected_headers: Headers = [
+            ("root_header_1", Some("root_value_1")),
+            ("root_header_2", Some("subdir_value_2")),
+            ("root_header_3", Some("root_value_3")),
+            ("subdir_header_1", Some("subdir_value_1")),
+            (
+                "request_specific_header_1",
+                Some("request_specific_header_value_1"),
+            ),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.map(|s| s.to_string())))
+        .collect();
+
+        assert_headers_eq(request.headers(), &expected_headers);
     }
 }

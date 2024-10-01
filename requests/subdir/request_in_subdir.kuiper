@@ -1,5 +1,5 @@
 {
-  "uri": "http://localhost/api/user/{user_id}",
+  "uri": "http://localhost/api/user/1",
   "method": "GET",
   "params": {},
   "headers": {

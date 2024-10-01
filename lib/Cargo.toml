@@ -1,7 +1,7 @@
 [package]
 name = "libkuiper"
 description = "Library code for the kuiper CLI"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 authors = ["Isak Jägberg <ijagberg@gmail.com>"]
 license = "MIT"

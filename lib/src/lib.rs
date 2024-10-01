@@ -230,7 +230,7 @@ mod tests {
     #[test]
     fn subdir_request_test() {
         let request = Request::find("../requests/subdir/request_in_subdir.kuiper").unwrap();
-        assert_eq!(request.uri(), "http://localhost/api/user/{user_id}");
+        assert_eq!(request.uri(), "http://localhost/api/user/1");
         let expected_headers: Headers = [
             ("root_header_1", Some("root_value_1")),
             ("root_header_2", Some("subdir_value_2")),

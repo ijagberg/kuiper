@@ -1,5 +1,5 @@
 use clap::Parser;
-use kuiper_lib::{KuiperError, Request};
+use libkuiper::{KuiperError, Request};
 use reqwest::Method;
 use std::{path::PathBuf, str::FromStr};
 
@@ -21,7 +21,7 @@ fn main() -> Result<(), KuiperError> {
         std::env::set_var("RUST_LOG", "info,kuiper_lib=trace");
     }
     pretty_env_logger::init_timed();
-    let request = kuiper_lib::Request::find(request_name)?;
+    let request = libkuiper::Request::find(request_name)?;
 
     send_request(&request);
 

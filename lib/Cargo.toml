@@ -1,6 +1,6 @@
 [package]
-name = "kuiper-lib"
-description = "An easy-to-use HTTP integration testing tool"
+name = "libkuiper"
+description = "Library code for the kuiper CLI"
 version = "0.0.1"
 edition = "2021"
 authors = ["Isak Jägberg <ijagberg@gmail.com>"]

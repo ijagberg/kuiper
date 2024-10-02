@@ -1,0 +1,11 @@
+{
+    "uri": "http://localhost/${{route}}",
+    "method": "GET",
+    "params": {
+        "query_param_1": "${{query_param_1}}"
+    },
+    "headers": {
+      "interpolated_header": "${{header_value}}"
+    }
+  }
+  

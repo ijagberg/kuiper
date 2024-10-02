@@ -17,7 +17,7 @@ pub type KuiperResult<T> = Result<T, KuiperError>;
 pub struct Request {
     uri: String,
     headers: Headers,
-    params: Value,
+    params: HashMap<String, String>,
     method: String,
     body: Option<Value>,
 }
@@ -76,28 +76,55 @@ impl Request {
     }
 
     fn interpolate(&mut self) -> KuiperResult<()> {
-        let new_url = interpolate(&self.uri)?;
+        self.interpolate_uri()?;
+        self.interpolate_params()?;
+        self.interpolate_headers()?;
+        self.interpolate_body()?;
+        trace!("successfully interpolated request");
+        Ok(())
+    }
+
+    fn interpolate_uri(&mut self) -> KuiperResult<()> {
+        let new_url = interpolate_str(&self.uri)?;
+        self.uri = new_url;
+
+        Ok(())
+    }
+
+    fn interpolate_headers(&mut self) -> KuiperResult<()> {
         for (_, value) in self.headers.iter_mut() {
             if let Some(v) = value {
-                let new_value = interpolate(&v.clone())?;
+                let new_value = interpolate_str(&v.clone())?;
                 *v = new_value;
             }
         }
-        self.uri = new_url;
 
+        Ok(())
+    }
+
+    fn interpolate_body(&mut self) -> KuiperResult<()> {
         if let Some(body) = &self.body {
             let s = body.to_string();
-            let new_body_s = interpolate(&s)?;
+            let new_body_s = interpolate_str(&s)?;
             self.body = serde_json::from_str(&new_body_s)?;
         }
 
-        // TODO: params
-        trace!("successfully interpolated request");
+        Ok(())
+    }
+
+    fn interpolate_params(&mut self) -> KuiperResult<()> {
+        for (_name, value) in self.params.iter_mut() {
+            *value = interpolate_str(value)?;
+        }
         Ok(())
     }
 
     pub fn body(&self) -> Option<&Value> {
         self.body.as_ref()
+    }
+
+    pub fn params(&self) -> &HashMap<String, String> {
+        &self.params
     }
 }
 
@@ -120,7 +147,7 @@ fn overwrite_headers(path: &Path, headers: &mut Headers) -> KuiperResult<()> {
     Ok(())
 }
 
-fn interpolate(input: &str) -> KuiperResult<String> {
+fn interpolate_str(input: &str) -> KuiperResult<String> {
     let mut result = input.to_owned();
     for (start_idx, _) in input.match_indices("${{") {
         let (end_idx, _) = input[start_idx..]
@@ -183,17 +210,24 @@ impl From<serde_json::Error> for KuiperError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
+    use std::{fmt::Debug, hash::Hash, path::Path};
     use test_log::test;
 
-    fn assert_headers_eq(left: &Headers, right: &Headers) {
+    fn assert_hash_map_eq<K, V>(left: &HashMap<K, V>, right: &HashMap<K, V>)
+    where
+        K: Hash + Eq + Debug,
+        V: Debug + PartialEq,
+    {
         assert_eq!(left.len(), right.len());
         for (left_key, left_value) in left {
-            let (right_key, right_value) = right.get_key_value(left_key).unwrap();
+            let (right_key, right_value) = right.get_key_value(left_key).expect(&format!(
+                "right HashMap does not contain key '{:?}'",
+                left_key
+            ));
             assert_eq!(left_key, right_key);
             assert_eq!(
                 left_value, right_value,
-                "headers differ at key '{}', left: '{:?}', right: '{:?}'",
+                "headers differ at key '{:?}', left: '{:?}', right: '{:?}'",
                 left_key, left_value, right_value
             );
         }
@@ -224,7 +258,7 @@ mod tests {
         .map(|(k, v)| (k.to_string(), v.map(|s| s.to_string())))
         .collect();
 
-        assert_headers_eq(request.headers(), &expected_headers);
+        assert_hash_map_eq(request.headers(), &expected_headers);
     }
 
     #[test]
@@ -245,6 +279,31 @@ mod tests {
         .map(|(k, v)| (k.to_string(), v.map(|s| s.to_string())))
         .collect();
 
-        assert_headers_eq(request.headers(), &expected_headers);
+        assert_hash_map_eq(request.headers(), &expected_headers);
+    }
+
+    #[test]
+    fn interpolation_test() {
+        dotenv::from_path("../requests/example.env").unwrap();
+        let interpolated_request = Request::find("../requests/interpolation.kuiper").unwrap();
+
+        let expected_params: HashMap<String, String> = [("query_param_1", "123")]
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        assert_hash_map_eq(&interpolated_request.params, &expected_params);
+
+        assert_eq!(interpolated_request.uri, "http://localhost/route_value");
+
+        let expected_headers: HashMap<String, Option<String>> = [
+            ("root_header_1", Some("root_value_1")),
+            ("root_header_2", Some("root_value_2")),
+            ("root_header_3", Some("root_value_3")),
+            ("interpolated_header", Some("1234")),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.map(|v| v.to_string())))
+        .collect();
+        assert_hash_map_eq(&interpolated_request.headers, &expected_headers);
     }
 }

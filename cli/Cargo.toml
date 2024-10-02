@@ -13,6 +13,7 @@ homepage = "https://github.com/ijagberg/kuiper"
 [dependencies]
 clap = { version = "4.5.18", features = ["derive"] }
 dotenv = "0.15.0"
-libkuiper = { version = "0.0.2" }
+# libkuiper = { version = "0.0.2" }
+libkuiper = { version = "0.0.2", path = "../lib" }
 pretty_env_logger = "0.5.0"
 reqwest = { version = "0.12.7", features = ["blocking", "json"] }

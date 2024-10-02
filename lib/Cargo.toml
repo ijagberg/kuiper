@@ -17,3 +17,4 @@ log = "0.4.22"
 
 [dev-dependencies]
 test-log = "0.2.16"
+dotenv = "0.15.0"

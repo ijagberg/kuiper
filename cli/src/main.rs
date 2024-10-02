@@ -39,6 +39,9 @@ fn send_request(req: &Request) {
     if let Some(body) = req.body() {
         request = request.json(body);
     }
+
+    request = request.query(&req.params().iter().collect::<Vec<_>>());
+
     let request = request.build().unwrap();
 
     let response = client.execute(request).unwrap();

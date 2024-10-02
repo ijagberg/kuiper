@@ -1,5 +1,5 @@
 use clap::Parser;
-use libkuiper::{KuiperError, Request};
+use libkuiper::Request;
 use reqwest::Method;
 use std::{path::PathBuf, str::FromStr};
 
@@ -10,22 +10,32 @@ struct Args {
     env_file: Option<PathBuf>,
 }
 
-fn main() -> Result<(), KuiperError> {
+fn main() {
     let Args { path, env_file } = Args::parse();
     let request_name = path;
 
     if let Some(env_file) = env_file {
-        dotenv::from_path(env_file.canonicalize()?).unwrap();
+        match env_file.canonicalize() {
+            Ok(path) => dotenv::from_path(path).unwrap(),
+            Err(e) => {
+                eprintln!("failed to read env file: '{}'", e.to_string());
+                return;
+            }
+        }
     }
     if std::env::var("RUST_LOG").is_err() {
         std::env::set_var("RUST_LOG", "info,kuiper_lib=trace");
     }
     pretty_env_logger::init_timed();
-    let request = libkuiper::Request::find(request_name)?;
-
-    send_request(&request);
-
-    Ok(())
+    match libkuiper::Request::find(request_name.clone()) {
+        Ok(request) => {
+            send_request(&request);
+        }
+        Err(e) => {
+            eprintln!("failed to parse request with name: '{request_name:?}': '{e}'");
+            return;
+        }
+    }
 }
 
 fn send_request(req: &Request) {
@@ -36,6 +46,7 @@ fn send_request(req: &Request) {
             request = request.header(name, v);
         }
     }
+
     if let Some(body) = req.body() {
         request = request.json(body);
     }

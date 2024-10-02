@@ -1,4 +1,5 @@
-use log::trace;
+use jiff::Timestamp;
+use log::{error, trace};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -9,6 +10,7 @@ use std::{
     io::BufReader,
     path::{Path, PathBuf},
 };
+use uuid::Uuid;
 
 pub type Headers = HashMap<String, Option<String>>;
 pub type KuiperResult<T> = Result<T, KuiperError>;
@@ -46,23 +48,6 @@ impl Request {
         Ok(request)
     }
 
-    fn from_file(path: &Path) -> KuiperResult<Self> {
-        let file = File::open(path).map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => KuiperError::RequestNotFound,
-            _ => e.into(),
-        })?;
-        let reader = BufReader::new(file);
-        let request: Request = serde_json::from_reader(reader)?;
-        trace!("successfully parsed request at '{path:?}'");
-        Ok(request)
-    }
-
-    fn add_header_if_not_exists(&mut self, header_name: String, header_value: Option<String>) {
-        if let Entry::Vacant(vacant_entry) = self.headers.entry(header_name) {
-            vacant_entry.insert(header_value);
-        }
-    }
-
     pub fn method(&self) -> &str {
         &self.method
     }
@@ -75,6 +60,14 @@ impl Request {
         &self.headers
     }
 
+    pub fn body(&self) -> Option<&Value> {
+        self.body.as_ref()
+    }
+
+    pub fn params(&self) -> &HashMap<String, String> {
+        &self.params
+    }
+
     fn interpolate(&mut self) -> KuiperResult<()> {
         self.interpolate_uri()?;
         self.interpolate_params()?;
@@ -85,7 +78,7 @@ impl Request {
     }
 
     fn interpolate_uri(&mut self) -> KuiperResult<()> {
-        let new_url = interpolate_str(&self.uri)?;
+        let new_url = Self::interpolate_str(&self.uri)?;
         self.uri = new_url;
 
         Ok(())
@@ -94,7 +87,7 @@ impl Request {
     fn interpolate_headers(&mut self) -> KuiperResult<()> {
         for (_, value) in self.headers.iter_mut() {
             if let Some(v) = value {
-                let new_value = interpolate_str(&v.clone())?;
+                let new_value = Self::interpolate_str(&v.clone())?;
                 *v = new_value;
             }
         }
@@ -105,7 +98,7 @@ impl Request {
     fn interpolate_body(&mut self) -> KuiperResult<()> {
         if let Some(body) = &self.body {
             let s = body.to_string();
-            let new_body_s = interpolate_str(&s)?;
+            let new_body_s = Self::interpolate_str(&s)?;
             self.body = serde_json::from_str(&new_body_s)?;
         }
 
@@ -114,17 +107,66 @@ impl Request {
 
     fn interpolate_params(&mut self) -> KuiperResult<()> {
         for (_name, value) in self.params.iter_mut() {
-            *value = interpolate_str(value)?;
+            *value = Self::interpolate_str(value)?;
         }
         Ok(())
     }
 
-    pub fn body(&self) -> Option<&Value> {
-        self.body.as_ref()
+    fn interpolate_str(input: &str) -> KuiperResult<String> {
+        let mut result = input.to_owned();
+        for (start_idx, _) in input.match_indices("{{") {
+            let (end_idx, _) = input[start_idx..]
+                .match_indices("}}")
+                .next()
+                .ok_or(InterpolationError::InvalidFormat)?;
+            let interpolated_name = &input[start_idx + 2..start_idx + end_idx];
+
+            let (interpolation_type, name) = interpolated_name
+                .split_once(':')
+                .ok_or(InterpolationError::InvalidFormat)?;
+
+            let value = match interpolation_type {
+                "env" => std::env::var(name)
+                    .map_err(|_| InterpolationError::MissingEnvVar(name.to_string()))?,
+                "expr" => Self::interpolation_expr(name)?,
+                s => {
+                    error!(
+                        "parsing Request from file failed, tried to interpolate the following '{}'",
+                        s
+                    );
+                    return Err(InterpolationError::InvalidFormat.into());
+                }
+            };
+
+            result = result.replace(&input[start_idx..start_idx + end_idx + 2], &value);
+        }
+
+        Ok(result)
     }
 
-    pub fn params(&self) -> &HashMap<String, String> {
-        &self.params
+    fn interpolation_expr(expr: &str) -> KuiperResult<String> {
+        match expr {
+            "uuid" => Ok(Uuid::new_v4().to_string()),
+            "now" => Ok(Timestamp::now().to_string()),
+            invalid => Err(KuiperError::InvalidExpr(invalid.to_string())),
+        }
+    }
+
+    fn add_header_if_not_exists(&mut self, header_name: String, header_value: Option<String>) {
+        if let Entry::Vacant(vacant_entry) = self.headers.entry(header_name) {
+            vacant_entry.insert(header_value);
+        }
+    }
+
+    fn from_file(path: &Path) -> KuiperResult<Self> {
+        let file = File::open(path).map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => KuiperError::RequestNotFound,
+            _ => e.into(),
+        })?;
+        let reader = BufReader::new(file);
+        let request: Request = serde_json::from_reader(reader)?;
+        trace!("successfully parsed request at '{path:?}'");
+        Ok(request)
     }
 }
 
@@ -147,33 +189,25 @@ fn overwrite_headers(path: &Path, headers: &mut Headers) -> KuiperResult<()> {
     Ok(())
 }
 
-fn interpolate_str(input: &str) -> KuiperResult<String> {
-    let mut result = input.to_owned();
-    for (start_idx, _) in input.match_indices("${{") {
-        let (end_idx, _) = input[start_idx..]
-            .match_indices("}}")
-            .next()
-            .ok_or(KuiperError::InterpolationError)?;
-        let interpolated_name = &input[start_idx + 3..start_idx + end_idx];
-        let interpolated_value =
-            std::env::var(interpolated_name).map_err(|_| KuiperError::InterpolationError)?;
-        result = result.replace(
-            &input[start_idx..start_idx + end_idx + 2],
-            &interpolated_value,
-        );
-    }
-
-    Ok(result)
-}
-
 #[derive(Debug)]
 pub enum KuiperError {
     IoError(std::io::Error),
     JsonError(serde_json::Error),
     RequestNotFound,
-    InterpolationError,
     FileFormatError,
     PathError,
+    InvalidExpr(String),
+    InterpolationError(InterpolationError),
+}
+
+impl KuiperError {
+    /// Returns `true` if the kuiper error is [`FileFormatError`].
+    ///
+    /// [`FileFormatError`]: KuiperError::FileFormatError
+    #[must_use]
+    pub fn is_file_format_error(&self) -> bool {
+        matches!(self, Self::FileFormatError)
+    }
 }
 
 impl Error for KuiperError {}
@@ -187,9 +221,11 @@ impl Display for KuiperError {
                 KuiperError::IoError(error) => format!("I/O error: {error}"),
                 KuiperError::JsonError(error) => format!("JSON error: {error}"),
                 KuiperError::RequestNotFound => "request not found".to_string(),
-                KuiperError::InterpolationError => "interpolation error".to_string(),
+                KuiperError::InterpolationError(error) =>
+                    format!("interpolation error '{}'", error),
                 KuiperError::FileFormatError => "file format error".to_string(),
                 KuiperError::PathError => "path error".to_string(),
+                KuiperError::InvalidExpr(expr) => format!("invalid expr: '{}'", expr),
             }
         )
     }
@@ -204,6 +240,33 @@ impl From<std::io::Error> for KuiperError {
 impl From<serde_json::Error> for KuiperError {
     fn from(value: serde_json::Error) -> Self {
         Self::JsonError(value)
+    }
+}
+
+impl From<InterpolationError> for KuiperError {
+    fn from(value: InterpolationError) -> Self {
+        Self::InterpolationError(value)
+    }
+}
+
+#[derive(Debug)]
+pub enum InterpolationError {
+    MissingEnvVar(String),
+    InvalidFormat,
+}
+
+impl Error for InterpolationError {}
+
+impl Display for InterpolationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                InterpolationError::MissingEnvVar(var) => format!("missing env var: '{var}'"),
+                InterpolationError::InvalidFormat => "invalid interpolation format".to_string(),
+            }
+        )
     }
 }
 
@@ -287,11 +350,16 @@ mod tests {
         dotenv::from_path("../requests/example.env").unwrap();
         let interpolated_request = Request::find("../requests/interpolation.kuiper").unwrap();
 
-        let expected_params: HashMap<String, String> = [("query_param_1", "123")]
-            .into_iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect();
-        assert_hash_map_eq(&interpolated_request.params, &expected_params);
+        assert_eq!(interpolated_request.params.len(), 3);
+        assert_eq!(interpolated_request.params["env_1"], "123");
+        // a new Uuid is generated every time the test is ran,
+        // so just assert that it is a Uuids
+        assert!(interpolated_request.params["expr_uuid"]
+            .parse::<Uuid>()
+            .is_ok());
+        assert!(interpolated_request.params["expr_now"]
+            .parse::<Timestamp>()
+            .is_ok());
 
         assert_eq!(interpolated_request.uri, "http://localhost/route_value");
 
@@ -305,5 +373,30 @@ mod tests {
         .map(|(k, v)| (k.to_string(), v.map(|v| v.to_string())))
         .collect();
         assert_hash_map_eq(&interpolated_request.headers, &expected_headers);
+    }
+
+    #[test]
+    fn interpolation_error_test() {
+        let result = Request::interpolate_str("asd{{env:{{env:abc}}");
+        assert!(
+            match &result {
+                Err(KuiperError::InterpolationError(InterpolationError::MissingEnvVar(var)))
+                    if var == "{{env:abc" =>
+                    true,
+                _ => false,
+            },
+            "{:?}",
+            result
+        );
+
+        let result = Request::interpolate_str("{{e{{nv:hello}}}}");
+        assert!(
+            match &result {
+                Err(KuiperError::InterpolationError(InterpolationError::InvalidFormat)) => true,
+                _ => false,
+            },
+            "{:?}",
+            result
+        );
     }
 }

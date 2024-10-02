@@ -31,13 +31,22 @@ Headers can be removed by explicitly setting them to `null`.
 
 ```json
 {
-  "uri": "http://localhost/api/user/1",
+  "uri": "http://localhost/api/user/{{env:user_id}}",
   "method": "GET",
   "headers": {
     "request_specific_header_1": "request_specific_header_value_1"
   }
 }
 ```
+
+## Interpolation
+
+Values can be evaluated dynamically in two different ways when parsing a `.kuiper` file.
+
+- `{{env:ENV_VAR}}`
+  This will be replaced by the value of the environment variable `ENV_VAR`.
+- `{{expr:EXPRESSION}}`
+  This will be replaced by a value depending on what `EXPRESSION` is. Currently, the only supported expressions are `uuid`, for generating a uuid, and `now` for generating a timestamp.
 
 # Background
 

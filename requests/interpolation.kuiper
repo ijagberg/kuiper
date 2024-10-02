@@ -1,11 +1,12 @@
 {
-    "uri": "http://localhost/${{route}}",
-    "method": "GET",
-    "params": {
-        "query_param_1": "${{query_param_1}}"
-    },
-    "headers": {
-      "interpolated_header": "${{header_value}}"
-    }
+  "uri": "http://localhost/{{env:route}}",
+  "method": "GET",
+  "params": {
+    "env_1": "{{env:query_param_1}}",
+    "expr_uuid": "{{expr:uuid}}",
+    "expr_now": "{{expr:now}}"
+  },
+  "headers": {
+    "interpolated_header": "{{env:header_value}}"
   }
-  
+}

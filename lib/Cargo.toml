@@ -14,6 +14,8 @@ homepage = "https://github.com/ijagberg/kuiper"
 serde = { version = "1.0.210", features = ["derive"] }
 serde_json = "1.0.128"
 log = "0.4.22"
+uuid = { version = "1.10.0", features = ["v4"] }
+jiff = "0.1.13"
 
 [dev-dependencies]
 test-log = "0.2.16"

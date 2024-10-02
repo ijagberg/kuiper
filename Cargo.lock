@@ -596,7 +596,7 @@ version = "0.0.3"
 dependencies = [
  "clap",
  "dotenv",
- "libkuiper",
+ "libkuiper 0.0.2",
  "pretty_env_logger",
  "reqwest",
 ]
@@ -616,6 +616,17 @@ checksum = "561d97a539a36e26a9a5fad1ea11a3039a67714694aaa379433e580854bc3dc5"
 [[package]]
 name = "libkuiper"
 version = "0.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec2d0f6dca72eef151b1025145ff0f3f78337ba4d273e62515165c05576aef3c"
+dependencies = [
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "libkuiper"
+version = "0.0.3"
 dependencies = [
  "dotenv",
  "log",

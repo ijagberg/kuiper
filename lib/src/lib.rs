@@ -3,10 +3,11 @@ use log::{error, trace};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{hash_map::Entry, HashMap, VecDeque},
     error::Error,
+    ffi::OsStr,
     fmt::Display,
-    fs::File,
+    fs::{self, File},
     io::BufReader,
     path::{Path, PathBuf},
 };
@@ -17,6 +18,8 @@ pub type KuiperResult<T> = Result<T, KuiperError>;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Request {
+    #[serde(skip)]
+    name: String,
     uri: String,
     headers: Headers,
     params: HashMap<String, String>,
@@ -26,10 +29,11 @@ pub struct Request {
 
 impl Request {
     pub fn find(path: impl Into<PathBuf>) -> KuiperResult<Self> {
-        let path: PathBuf = path.into();
+        let mut path: PathBuf = path.into();
         trace!("finding request at '{path:?}");
-        if !path.is_relative() {
-            return Err(KuiperError::PathError);
+        if path.is_relative() {
+            path = path.canonicalize()?;
+            // return Err(KuiperError::PathError);
         }
 
         let mut request = Self::from_file(&path)?;
@@ -46,6 +50,37 @@ impl Request {
         request.interpolate()?;
 
         Ok(request)
+    }
+
+    pub fn search(root: impl Into<PathBuf>, term: &str) -> KuiperResult<Vec<Self>> {
+        let root: PathBuf = root.into();
+        let mut matches = Vec::with_capacity(10);
+        let mut dirs = VecDeque::new();
+        dirs.push_back(root);
+        while let Some(dir) = dirs.pop_front() {
+            let contents = fs::read_dir(dir)?;
+            for entry in contents {
+                let entry = entry?.path();
+                if entry.is_dir() {
+                    dirs.push_back(entry);
+                } else if entry.is_file() && entry.extension().unwrap_or(OsStr::new("")) == "kuiper"
+                {
+                    let name = entry.to_str().unwrap();
+                    if name.contains(term) {
+                        matches.push(entry.clone());
+                    }
+                }
+            }
+        }
+
+        Ok(matches
+            .into_iter()
+            .map(|path| Self::find(path))
+            .collect::<Result<_, _>>()?)
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     pub fn method(&self) -> &str {
@@ -164,8 +199,9 @@ impl Request {
             _ => e.into(),
         })?;
         let reader = BufReader::new(file);
-        let request: Request = serde_json::from_reader(reader)?;
+        let mut request: Request = serde_json::from_reader(reader)?;
         trace!("successfully parsed request at '{path:?}'");
+        request.name = path.to_str().ok_or(KuiperError::PathError)?.to_string();
         Ok(request)
     }
 }

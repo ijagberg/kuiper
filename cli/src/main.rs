@@ -24,7 +24,7 @@ fn main() {
         match env_file.canonicalize() {
             Ok(env_file_path) => dotenv::from_path(env_file_path).unwrap(),
             Err(e) => {
-                eprintln!("failed to read env file: '{}'", e.to_string());
+                eprintln!("failed to read env file: '{}'", e);
                 return;
             }
         }
@@ -49,7 +49,6 @@ fn main() {
                 }
                 Err(e) => {
                     eprintln!("failed to parse request with name: {existing_path:?}: '{e}'");
-                    return;
                 }
             }
         }
@@ -58,7 +57,6 @@ fn main() {
             let mut m = Request::search(dir, &path).expect("failed to search");
             if m.is_empty() {
                 eprintln!("no request found for that term '{}'", path);
-                return;
             } else if m.len() > 1 {
                 eprintln!(
                     "multiple candidate requests for term '{}': [{}]",

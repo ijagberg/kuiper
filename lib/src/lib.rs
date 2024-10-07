@@ -73,10 +73,10 @@ impl Request {
             }
         }
 
-        Ok(matches
+        matches
             .into_iter()
-            .map(|path| Self::find(path))
-            .collect::<Result<_, _>>()?)
+            .map(Self::find)
+            .collect::<Result<_, _>>()
     }
 
     pub fn name(&self) -> &str {
@@ -319,10 +319,9 @@ mod tests {
     {
         assert_eq!(left.len(), right.len());
         for (left_key, left_value) in left {
-            let (right_key, right_value) = right.get_key_value(left_key).expect(&format!(
-                "right HashMap does not contain key '{:?}'",
-                left_key
-            ));
+            let (right_key, right_value) = right
+                .get_key_value(left_key)
+                .unwrap_or_else(|| panic!("right HashMap does not contain key '{:?}'", left_key));
             assert_eq!(left_key, right_key);
             assert_eq!(
                 left_value, right_value,
@@ -415,22 +414,19 @@ mod tests {
     fn interpolation_error_test() {
         let result = Request::interpolate_str("asd{{env:{{env:abc}}");
         assert!(
-            match &result {
-                Err(KuiperError::InterpolationError(InterpolationError::MissingEnvVar(var)))
-                    if var == "{{env:abc" =>
-                    true,
-                _ => false,
-            },
+            matches!(&result, Err(KuiperError::InterpolationError(InterpolationError::MissingEnvVar(var))) if var == "{{env:abc"),
             "{:?}",
             result
         );
 
         let result = Request::interpolate_str("{{e{{nv:hello}}}}");
         assert!(
-            match &result {
-                Err(KuiperError::InterpolationError(InterpolationError::InvalidFormat)) => true,
-                _ => false,
-            },
+            matches!(
+                &result,
+                Err(KuiperError::InterpolationError(
+                    InterpolationError::InvalidFormat
+                ))
+            ),
             "{:?}",
             result
         );

@@ -65,7 +65,9 @@ impl Request {
                     dirs.push_back(entry);
                 } else if entry.is_file() && entry.extension().unwrap_or(OsStr::new("")) == "kuiper"
                 {
-                    let name = entry.to_str().unwrap();
+                    let name = entry
+                        .to_str()
+                        .unwrap_or_else(|| panic!("failed to read path '{:?}' as string", entry));
                     if name.contains(term) {
                         matches.push(entry.clone());
                     }
@@ -225,14 +227,21 @@ fn overwrite_headers(path: &Path, headers: &mut Headers) -> KuiperResult<()> {
     Ok(())
 }
 
+/// Various errors that can occur.
 #[derive(Debug)]
 pub enum KuiperError {
+    /// IO error.
     IoError(std::io::Error),
+    /// JSON error.
     JsonError(serde_json::Error),
+    /// Failed to find the request file.
     RequestNotFound,
+    /// Request file had the wrong format.
     FileFormatError,
     PathError,
+    /// Request file contained an invalid expression.
     InvalidExpr(String),
+    /// Request file contained an invalid interpolation.
     InterpolationError(InterpolationError),
 }
 
@@ -285,9 +294,12 @@ impl From<InterpolationError> for KuiperError {
     }
 }
 
+/// Various errors that can occur when interpolating expressions.
 #[derive(Debug)]
 pub enum InterpolationError {
+    /// Environment variable is missing.
     MissingEnvVar(String),
+    /// Interpolation has an invalid format.
     InvalidFormat,
 }
 

@@ -3,6 +3,7 @@ use libkuiper::Request;
 use reqwest::Method;
 use std::{path::PathBuf, str::FromStr};
 
+/// Arguments for the `kuiper` cli.
 #[derive(clap::Parser)]
 struct Args {
     path: String,

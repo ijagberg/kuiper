@@ -357,7 +357,7 @@ mod tests {
 
     #[test]
     fn root_request_test() {
-        let request = Request::find("../requests/request_in_root.kuiper").unwrap();
+        let request = Request::find("requests/request_in_root.kuiper").unwrap();
         assert_eq!(request.uri(), "http://www.example.com");
         let expected_headers: Headers = [
             ("root_header_1", Some("root_value_1")),
@@ -373,7 +373,7 @@ mod tests {
 
     #[test]
     fn subdir_request_test() {
-        let request = Request::find("../requests/subdir/request_in_subdir.kuiper").unwrap();
+        let request = Request::find("requests/subdir/request_in_subdir.kuiper").unwrap();
         assert_eq!(request.uri(), "http://localhost/api/user/1");
         let expected_headers: Headers = [
             ("root_header_1", Some("root_value_1")),
@@ -394,8 +394,8 @@ mod tests {
 
     #[test]
     fn interpolation_test() {
-        dotenv::from_path("../requests/example.env").unwrap();
-        let interpolated_request = Request::find("../requests/interpolation.kuiper").unwrap();
+        dotenv::from_path("requests/example.env").unwrap();
+        let interpolated_request = Request::find("requests/interpolation.kuiper").unwrap();
 
         assert_eq!(interpolated_request.params.len(), 3);
         assert_eq!(interpolated_request.params["env_1"], "123");

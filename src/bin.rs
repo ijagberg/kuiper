@@ -1,5 +1,5 @@
 use clap::Parser;
-use libkuiper::Request;
+use lib::Request;
 use reqwest::Method;
 use std::{path::PathBuf, str::FromStr};
 
@@ -44,7 +44,7 @@ fn main() {
             }
 
             pretty_env_logger::init_timed();
-            match libkuiper::Request::find(existing_path.clone()) {
+            match lib::Request::find(existing_path.clone()) {
                 Ok(request) => {
                     send_request(&request);
                 }

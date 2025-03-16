@@ -771,6 +771,7 @@ dependencies = [
 name = "kuiper"
 version = "0.0.6"
 dependencies = [
+ "bytes",
  "clap",
  "dotenv",
  "jiff",

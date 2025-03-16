@@ -1,5 +1,7 @@
+use bytes::Bytes;
 use jiff::Timestamp;
 use log::{error, trace};
+use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -15,6 +17,15 @@ use uuid::Uuid;
 
 pub type Headers = HashMap<String, Option<String>>;
 pub type KuiperResult<T> = Result<T, KuiperError>;
+
+pub struct Req {
+    uri: Url,
+    headers: Headers,
+    params: HashMap<String, String>,
+    body: Bytes,
+}
+
+impl Req {}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Request {
@@ -63,8 +74,7 @@ impl Request {
                 let entry = entry?.path();
                 if entry.is_dir() {
                     dirs.push_back(entry);
-                } else if entry.is_file() && entry.extension().unwrap_or(OsStr::new("")) == "kuiper"
-                {
+                } else if entry.is_file() && entry.extension().map(|e| e.to_str()) == "kuiper" {
                     let name = entry
                         .to_str()
                         .unwrap_or_else(|| panic!("failed to read path '{:?}' as string", entry));

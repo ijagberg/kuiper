@@ -44,35 +44,21 @@ fn main() {
             }
 
             pretty_env_logger::init_timed();
-            match lib::Request::find(existing_path.clone()) {
-                Ok(request) => {
-                    send_request(&request);
-                }
+            match lib::RequestFile::find(existing_path.clone()) {
+                Ok(request) => match Request::try_from(request) {
+                    Ok(r) => send_request(r),
+                    Err(e) => eprintln!("failed to parse request file: '{}'", e),
+                },
                 Err(e) => {
                     eprintln!("failed to parse request with name: {existing_path:?}: '{e}'");
                 }
             }
         }
-        Err(_) => {
-            // try searching instead of finding
-            let mut m = Request::search(dir, &path).expect("failed to search");
-            if m.is_empty() {
-                eprintln!("no request found for that term '{}'", path);
-            } else if m.len() > 1 {
-                eprintln!(
-                    "multiple candidate requests for term '{}': [{}]",
-                    path,
-                    m.iter().map(|r| r.name()).collect::<Vec<_>>().join(", ")
-                );
-            } else {
-                let request = m.remove(0);
-                send_request(&request);
-            }
-        }
+        Err(_) => {}
     }
 }
 
-fn send_request(req: &Request) {
+fn send_request(req: Request) {
     let client = reqwest::blocking::Client::new();
     let mut request = client.request(Method::from_str(req.method()).unwrap(), req.uri());
     for (name, value) in req.headers() {
@@ -81,17 +67,16 @@ fn send_request(req: &Request) {
         }
     }
 
-    if let Some(body) = req.body() {
-        request = request.json(body);
-    }
-
     request = request.query(&req.params().iter().collect::<Vec<_>>());
+
+    if let Some(body) = req.body() {
+        request = request.body(body);
+    }
 
     let request = request.build().unwrap();
 
     let response = client.execute(request).unwrap();
 
-    println!("{}", req.name());
     println!("{}", response.status());
     println!("{}", response.text().unwrap());
 }

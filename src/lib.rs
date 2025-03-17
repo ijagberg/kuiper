@@ -1,44 +1,96 @@
 use bytes::Bytes;
 use jiff::Timestamp;
 use log::{error, trace};
-use reqwest::Url;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde::Deserialize;
 use std::{
-    collections::{hash_map::Entry, HashMap, VecDeque},
+    collections::{hash_map::Entry, HashMap},
     error::Error,
-    ffi::OsStr,
     fmt::Display,
-    fs::{self, File},
+    fs::File,
     io::BufReader,
     path::{Path, PathBuf},
 };
 use uuid::Uuid;
 
 pub type Headers = HashMap<String, Option<String>>;
+pub type Params = HashMap<String, String>;
 pub type KuiperResult<T> = Result<T, KuiperError>;
 
-pub struct Req {
-    uri: Url,
-    headers: Headers,
-    params: HashMap<String, String>,
-    body: Bytes,
-}
-
-impl Req {}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct Request {
-    #[serde(skip)]
-    name: String,
+#[derive(Deserialize, Debug)]
+pub struct RequestFile {
     uri: String,
-    headers: Headers,
-    params: HashMap<String, String>,
     method: String,
-    body: Option<Value>,
+    headers: Headers,
+    params: Params,
+    body: Option<String>,
 }
 
-impl Request {
+fn interpolate_params(params: &mut Params) -> KuiperResult<()> {
+    for (_, value) in params.iter_mut() {
+        let new_value = interpolate_str(&value)?;
+        *value = new_value;
+    }
+    Ok(())
+}
+
+fn interpolate_headers(headers: &mut Headers) -> KuiperResult<()> {
+    for (_, value) in headers.iter_mut() {
+        if let Some(v) = value {
+            let new_value = interpolate_str(&v.clone())?;
+            *v = new_value;
+        }
+    }
+
+    Ok(())
+}
+
+fn interpolate_str(input: &str) -> KuiperResult<String> {
+    let mut result = input.to_owned();
+    for (start_idx, _) in input.match_indices("{{") {
+        let (end_idx, _) = input[start_idx..]
+            .match_indices("}}")
+            .next()
+            .ok_or(InterpolationError::InvalidFormat)?;
+        let interpolated_name = &input[start_idx + 2..start_idx + end_idx];
+
+        let (interpolation_type, name) = interpolated_name
+            .split_once(':')
+            .ok_or(InterpolationError::InvalidFormat)?;
+
+        let value = match interpolation_type {
+            "env" => std::env::var(name)
+                .map_err(|_| InterpolationError::MissingEnvVar(name.to_string()))?,
+            "expr" => interpolation_expr(name)?,
+            s => {
+                error!(
+                    "parsing Request from file failed, tried to interpolate the following '{}'",
+                    s
+                );
+                return Err(InterpolationError::InvalidFormat.into());
+            }
+        };
+
+        result = result.replace(&input[start_idx..start_idx + end_idx + 2], &value);
+    }
+
+    Ok(result)
+}
+
+fn interpolation_expr(expr: &str) -> KuiperResult<String> {
+    match expr {
+        "uuid" => Ok(Uuid::new_v4().to_string()),
+        "now" => Ok(Timestamp::now().to_string()),
+        invalid => Err(KuiperError::InvalidExpr(invalid.to_string())),
+    }
+}
+
+fn read_body_string(path: &String) -> Result<String, KuiperError> {
+    let file_contents = std::fs::read_to_string(path)?;
+    let res = interpolate_str(&file_contents).unwrap();
+    Ok(res)
+}
+
+impl RequestFile {
     pub fn find(path: impl Into<PathBuf>) -> KuiperResult<Self> {
         let mut path: PathBuf = path.into();
         trace!("finding request at '{path:?}");
@@ -58,45 +110,79 @@ impl Request {
             request.add_header_if_not_exists(name, value);
         }
 
-        request.interpolate()?;
+        //request.interpolate()?;
 
         Ok(request)
     }
 
-    pub fn search(root: impl Into<PathBuf>, term: &str) -> KuiperResult<Vec<Self>> {
-        let root: PathBuf = root.into();
-        let mut matches = Vec::with_capacity(10);
-        let mut dirs = VecDeque::new();
-        dirs.push_back(root);
-        while let Some(dir) = dirs.pop_front() {
-            let contents = fs::read_dir(dir)?;
-            for entry in contents {
-                let entry = entry?.path();
-                if entry.is_dir() {
-                    dirs.push_back(entry);
-                } else if entry.is_file() && entry.extension().map(|e| e.to_str()) == "kuiper" {
-                    let name = entry
-                        .to_str()
-                        .unwrap_or_else(|| panic!("failed to read path '{:?}' as string", entry));
-                    if name.contains(term) {
-                        matches.push(entry.clone());
-                    }
-                }
-            }
+    fn from_file(path: &Path) -> KuiperResult<Self> {
+        let file = File::open(path).map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => KuiperError::RequestNotFound,
+            _ => e.into(),
+        })?;
+        let reader = BufReader::new(file);
+        let request: RequestFile = serde_json::from_reader(reader)?;
+        trace!("successfully parsed request at '{path:?}'");
+        Ok(request)
+    }
+
+    fn add_header_if_not_exists(&mut self, header_name: String, header_value: Option<String>) {
+        if let Entry::Vacant(vacant_entry) = self.headers.entry(header_name) {
+            vacant_entry.insert(header_value);
         }
-
-        matches
-            .into_iter()
-            .map(Self::find)
-            .collect::<Result<_, _>>()
     }
+}
 
-    pub fn name(&self) -> &str {
-        &self.name
+impl TryFrom<RequestFile> for Request {
+    type Error = KuiperError;
+
+    fn try_from(value: RequestFile) -> Result<Self, Self::Error> {
+        let RequestFile {
+            uri,
+            method,
+            mut headers,
+            mut params,
+            body,
+        } = value;
+
+        let uri = interpolate_str(&uri)?;
+        let method = method;
+        interpolate_headers(&mut headers)?;
+        interpolate_params(&mut params)?;
+        let body: Option<Bytes> = if let Some(path) = body {
+            let s = read_body_string(&path)?;
+            Some(s.into())
+        } else {
+            None
+        };
+
+        Ok(Request::new(uri, headers, params, method, body))
     }
+}
 
-    pub fn method(&self) -> &str {
-        &self.method
+pub struct Request {
+    uri: String,
+    headers: Headers,
+    params: HashMap<String, String>,
+    method: String,
+    body: Option<Bytes>,
+}
+
+impl Request {
+    pub fn new(
+        uri: String,
+        headers: Headers,
+        params: HashMap<String, String>,
+        method: String,
+        body: Option<Bytes>,
+    ) -> Self {
+        Self {
+            uri,
+            headers,
+            params,
+            method,
+            body,
+        }
     }
 
     pub fn uri(&self) -> &str {
@@ -107,114 +193,16 @@ impl Request {
         &self.headers
     }
 
-    pub fn body(&self) -> Option<&Value> {
-        self.body.as_ref()
-    }
-
     pub fn params(&self) -> &HashMap<String, String> {
         &self.params
     }
 
-    fn interpolate(&mut self) -> KuiperResult<()> {
-        self.interpolate_uri()?;
-        self.interpolate_params()?;
-        self.interpolate_headers()?;
-        self.interpolate_body()?;
-        trace!("successfully interpolated request");
-        Ok(())
+    pub fn method(&self) -> &str {
+        &self.method
     }
 
-    fn interpolate_uri(&mut self) -> KuiperResult<()> {
-        let new_url = Self::interpolate_str(&self.uri)?;
-        self.uri = new_url;
-
-        Ok(())
-    }
-
-    fn interpolate_headers(&mut self) -> KuiperResult<()> {
-        for (_, value) in self.headers.iter_mut() {
-            if let Some(v) = value {
-                let new_value = Self::interpolate_str(&v.clone())?;
-                *v = new_value;
-            }
-        }
-
-        Ok(())
-    }
-
-    fn interpolate_body(&mut self) -> KuiperResult<()> {
-        if let Some(body) = &self.body {
-            let s = body.to_string();
-            let new_body_s = Self::interpolate_str(&s)?;
-            self.body = serde_json::from_str(&new_body_s)?;
-        }
-
-        Ok(())
-    }
-
-    fn interpolate_params(&mut self) -> KuiperResult<()> {
-        for (_name, value) in self.params.iter_mut() {
-            *value = Self::interpolate_str(value)?;
-        }
-        Ok(())
-    }
-
-    fn interpolate_str(input: &str) -> KuiperResult<String> {
-        let mut result = input.to_owned();
-        for (start_idx, _) in input.match_indices("{{") {
-            let (end_idx, _) = input[start_idx..]
-                .match_indices("}}")
-                .next()
-                .ok_or(InterpolationError::InvalidFormat)?;
-            let interpolated_name = &input[start_idx + 2..start_idx + end_idx];
-
-            let (interpolation_type, name) = interpolated_name
-                .split_once(':')
-                .ok_or(InterpolationError::InvalidFormat)?;
-
-            let value = match interpolation_type {
-                "env" => std::env::var(name)
-                    .map_err(|_| InterpolationError::MissingEnvVar(name.to_string()))?,
-                "expr" => Self::interpolation_expr(name)?,
-                s => {
-                    error!(
-                        "parsing Request from file failed, tried to interpolate the following '{}'",
-                        s
-                    );
-                    return Err(InterpolationError::InvalidFormat.into());
-                }
-            };
-
-            result = result.replace(&input[start_idx..start_idx + end_idx + 2], &value);
-        }
-
-        Ok(result)
-    }
-
-    fn interpolation_expr(expr: &str) -> KuiperResult<String> {
-        match expr {
-            "uuid" => Ok(Uuid::new_v4().to_string()),
-            "now" => Ok(Timestamp::now().to_string()),
-            invalid => Err(KuiperError::InvalidExpr(invalid.to_string())),
-        }
-    }
-
-    fn add_header_if_not_exists(&mut self, header_name: String, header_value: Option<String>) {
-        if let Entry::Vacant(vacant_entry) = self.headers.entry(header_name) {
-            vacant_entry.insert(header_value);
-        }
-    }
-
-    fn from_file(path: &Path) -> KuiperResult<Self> {
-        let file = File::open(path).map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => KuiperError::RequestNotFound,
-            _ => e.into(),
-        })?;
-        let reader = BufReader::new(file);
-        let mut request: Request = serde_json::from_reader(reader)?;
-        trace!("successfully parsed request at '{path:?}'");
-        request.name = path.to_str().ok_or(KuiperError::PathError)?.to_string();
-        Ok(request)
+    pub fn body(self) -> Option<Bytes> {
+        self.body
     }
 }
 
@@ -367,7 +355,8 @@ mod tests {
 
     #[test]
     fn root_request_test() {
-        let request = Request::find("requests/request_in_root.kuiper").unwrap();
+        let request_file = RequestFile::find("requests/request_in_root.kuiper").unwrap();
+        let request = Request::try_from(request_file).unwrap();
         assert_eq!(request.uri(), "http://www.example.com");
         let expected_headers: Headers = [
             ("root_header_1", Some("root_value_1")),
@@ -383,7 +372,8 @@ mod tests {
 
     #[test]
     fn subdir_request_test() {
-        let request = Request::find("requests/subdir/request_in_subdir.kuiper").unwrap();
+        let request_file = RequestFile::find("requests/subdir/request_in_subdir.kuiper").unwrap();
+        let request = Request::try_from(request_file).unwrap();
         assert_eq!(request.uri(), "http://localhost/api/user/1");
         let expected_headers: Headers = [
             ("root_header_1", Some("root_value_1")),
@@ -405,7 +395,8 @@ mod tests {
     #[test]
     fn interpolation_test() {
         dotenv::from_path("requests/example.env").unwrap();
-        let interpolated_request = Request::find("requests/interpolation.kuiper").unwrap();
+        let request_file = RequestFile::find("requests/interpolation.kuiper").unwrap();
+        let interpolated_request = Request::try_from(request_file).unwrap();
 
         assert_eq!(interpolated_request.params.len(), 3);
         assert_eq!(interpolated_request.params["env_1"], "123");
@@ -434,14 +425,14 @@ mod tests {
 
     #[test]
     fn interpolation_error_test() {
-        let result = Request::interpolate_str("asd{{env:{{env:abc}}");
+        let result = interpolate_str("asd{{env:{{env:abc}}");
         assert!(
             matches!(&result, Err(KuiperError::InterpolationError(InterpolationError::MissingEnvVar(var))) if var == "{{env:abc"),
             "{:?}",
             result
         );
 
-        let result = Request::interpolate_str("{{e{{nv:hello}}}}");
+        let result = interpolate_str("{{e{{nv:hello}}}}");
         assert!(
             matches!(
                 &result,

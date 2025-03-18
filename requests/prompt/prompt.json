@@ -1,0 +1,8 @@
+{
+  "uri": "http://localhost",
+  "method": "GET",
+  "params": {
+    "param1": "{{prompt:value of param1}}"
+  },
+  "headers": {}
+}

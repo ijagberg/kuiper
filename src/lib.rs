@@ -7,7 +7,7 @@ use std::{
     error::Error,
     fmt::Display,
     fs::File,
-    io::{BufReader, Read},
+    io::{stdin, BufReader, Read, Write},
     path::{Path, PathBuf},
 };
 use uuid::Uuid;
@@ -110,6 +110,7 @@ fn interpolate_str(input: &str) -> KuiperResult<String> {
             "env" => std::env::var(name)
                 .map_err(|_| InterpolationError::MissingEnvVar(name.to_string()))?,
             "expr" => interpolation_expr(name)?,
+            "prompt" => interpolation_prompt(name)?,
             s => {
                 error!(
                     "parsing Request from file failed, tried to interpolate the following '{}'",
@@ -123,6 +124,16 @@ fn interpolate_str(input: &str) -> KuiperResult<String> {
     }
 
     Ok(result)
+}
+
+fn interpolation_prompt(name: &str) -> KuiperResult<String> {
+    print!("enter a value for '{}'... ", name);
+    std::io::stdout().flush()?;
+    let mut buf = String::new(); // TODO: capacity
+                                 //stdin().read_line
+    stdin().read_to_string(&mut buf)?;
+    println!();
+    Ok(buf)
 }
 
 fn interpolation_expr(expr: &str) -> KuiperResult<String> {

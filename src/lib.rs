@@ -17,12 +17,61 @@ pub type Params = HashMap<String, String>;
 pub type KuiperResult<T> = Result<T, KuiperError>;
 
 #[derive(Deserialize, Debug)]
-pub struct RequestFile {
+struct RequestFile {
     uri: String,
     method: String,
     headers: Headers,
     params: Params,
     body: Option<String>,
+}
+
+impl RequestFile {
+    fn find(path: impl Into<PathBuf>) -> KuiperResult<(Self, Option<File>)> {
+        let mut path: PathBuf = path.into();
+        trace!("finding request at '{path:?}");
+        if path.is_relative() {
+            path = path.canonicalize()?;
+        }
+
+        let mut request = Self::from_file(&path)?;
+        let ancestors: Vec<_> = path.ancestors().collect();
+        let mut headers = Headers::new();
+        for subdir in ancestors.into_iter().skip(1).rev().skip(1) {
+            overwrite_headers(&subdir.join("headers.json"), &mut headers)?;
+        }
+
+        for (name, value) in headers {
+            request.add_header_if_not_exists(name, value);
+        }
+
+        let mut body_file = None;
+        if let Some(body_path) = &request.body {
+            let mut body_dir = path.parent().unwrap_or(Path::new("/")).to_path_buf();
+            body_dir.push(body_path);
+            path = body_dir.canonicalize()?;
+            body_file = Some(File::open(path)?);
+        }
+
+        Ok((request, body_file))
+    }
+
+    /// Parse a `RequestFile` from the given path.
+    fn from_file(path: &Path) -> KuiperResult<Self> {
+        let file = File::open(path).map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => KuiperError::RequestNotFound,
+            _ => e.into(),
+        })?;
+        let reader = BufReader::new(file);
+        let request: RequestFile = serde_json::from_reader(reader)?;
+        trace!("successfully parsed request at '{path:?}'");
+        Ok(request)
+    }
+
+    fn add_header_if_not_exists(&mut self, header_name: String, header_value: Option<String>) {
+        if let Entry::Vacant(vacant_entry) = self.headers.entry(header_name) {
+            vacant_entry.insert(header_value);
+        }
+    }
 }
 
 fn interpolate_params(params: &mut Params) -> KuiperResult<()> {
@@ -81,56 +130,6 @@ fn interpolation_expr(expr: &str) -> KuiperResult<String> {
         "uuid" => Ok(Uuid::new_v4().to_string()),
         "now" => Ok(Timestamp::now().to_string()),
         invalid => Err(KuiperError::InvalidExpr(invalid.to_string())),
-    }
-}
-
-impl RequestFile {
-    pub fn find(path: impl Into<PathBuf>) -> KuiperResult<(Self, Option<File>)> {
-        let mut path: PathBuf = path.into();
-        trace!("finding request at '{path:?}");
-        if path.is_relative() {
-            path = path.canonicalize()?;
-            trace!("request is at '{path:?}'");
-            // return Err(KuiperError::PathError);
-        }
-
-        let mut request = Self::from_file(&path)?;
-        let ancestors: Vec<_> = path.ancestors().collect();
-        let mut headers = Headers::new();
-        for subdir in ancestors.into_iter().skip(1).rev().skip(1) {
-            overwrite_headers(&subdir.join("headers.json"), &mut headers)?;
-        }
-
-        for (name, value) in headers {
-            request.add_header_if_not_exists(name, value);
-        }
-
-        let mut body_file = None;
-        if let Some(body_path) = &request.body {
-            let mut body_dir = path.parent().unwrap_or(Path::new("/")).to_path_buf();
-            body_dir.push(body_path);
-            path = body_dir.canonicalize()?;
-            body_file = Some(File::open(path)?);
-        }
-
-        Ok((request, body_file))
-    }
-
-    fn from_file(path: &Path) -> KuiperResult<Self> {
-        let file = File::open(path).map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => KuiperError::RequestNotFound,
-            _ => e.into(),
-        })?;
-        let reader = BufReader::new(file);
-        let request: RequestFile = serde_json::from_reader(reader)?;
-        trace!("successfully parsed request at '{path:?}'");
-        Ok(request)
-    }
-
-    fn add_header_if_not_exists(&mut self, header_name: String, header_value: Option<String>) {
-        if let Entry::Vacant(vacant_entry) = self.headers.entry(header_name) {
-            vacant_entry.insert(header_value);
-        }
     }
 }
 

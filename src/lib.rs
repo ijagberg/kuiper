@@ -7,7 +7,7 @@ use std::{
     error::Error,
     fmt::Display,
     fs::File,
-    io::BufReader,
+    io::{BufReader, Read},
     path::{Path, PathBuf},
 };
 use uuid::Uuid;
@@ -84,18 +84,13 @@ fn interpolation_expr(expr: &str) -> KuiperResult<String> {
     }
 }
 
-fn read_body_string(path: &String) -> Result<String, KuiperError> {
-    let file_contents = std::fs::read_to_string(path)?;
-    let res = interpolate_str(&file_contents).unwrap();
-    Ok(res)
-}
-
 impl RequestFile {
-    pub fn find(path: impl Into<PathBuf>) -> KuiperResult<Self> {
+    pub fn find(path: impl Into<PathBuf>) -> KuiperResult<(Self, Option<File>)> {
         let mut path: PathBuf = path.into();
         trace!("finding request at '{path:?}");
         if path.is_relative() {
             path = path.canonicalize()?;
+            trace!("request is at '{path:?}'");
             // return Err(KuiperError::PathError);
         }
 
@@ -110,9 +105,15 @@ impl RequestFile {
             request.add_header_if_not_exists(name, value);
         }
 
-        //request.interpolate()?;
+        let mut body_file = None;
+        if let Some(body_path) = &request.body {
+            let mut body_dir = path.parent().unwrap_or(Path::new("/")).to_path_buf();
+            body_dir.push(body_path);
+            path = body_dir.canonicalize()?;
+            body_file = Some(File::open(path)?);
+        }
 
-        Ok(request)
+        Ok((request, body_file))
     }
 
     fn from_file(path: &Path) -> KuiperResult<Self> {
@@ -130,33 +131,6 @@ impl RequestFile {
         if let Entry::Vacant(vacant_entry) = self.headers.entry(header_name) {
             vacant_entry.insert(header_value);
         }
-    }
-}
-
-impl TryFrom<RequestFile> for Request {
-    type Error = KuiperError;
-
-    fn try_from(value: RequestFile) -> Result<Self, Self::Error> {
-        let RequestFile {
-            uri,
-            method,
-            mut headers,
-            mut params,
-            body,
-        } = value;
-
-        let uri = interpolate_str(&uri)?;
-        let method = method;
-        interpolate_headers(&mut headers)?;
-        interpolate_params(&mut params)?;
-        let body: Option<Bytes> = if let Some(path) = body {
-            let s = read_body_string(&path)?;
-            Some(s.into())
-        } else {
-            None
-        };
-
-        Ok(Request::new(uri, headers, params, method, body))
     }
 }
 
@@ -183,6 +157,31 @@ impl Request {
             method,
             body,
         }
+    }
+
+    pub fn from_file(path: impl Into<PathBuf>) -> KuiperResult<Self> {
+        let (request_file, body_file) = RequestFile::find(path)?;
+        let RequestFile {
+            uri,
+            method,
+            mut headers,
+            mut params,
+            body: _,
+        } = request_file;
+
+        let uri = interpolate_str(&uri)?;
+        let method = method;
+        interpolate_headers(&mut headers)?;
+        interpolate_params(&mut params)?;
+        let mut request = Request::new(uri, headers, params, method, None);
+        if let Some(mut f) = body_file {
+            let mut buf = String::new(); // TODO: capacity
+            f.read_to_string(&mut buf)?;
+            let body_interp = interpolate_str(&buf)?;
+            request.body = Some(body_interp.into_bytes().into());
+        }
+
+        Ok(request)
     }
 
     pub fn uri(&self) -> &str {
@@ -241,16 +240,6 @@ pub enum KuiperError {
     InvalidExpr(String),
     /// Request file contained an invalid interpolation.
     InterpolationError(InterpolationError),
-}
-
-impl KuiperError {
-    /// Returns `true` if the kuiper error is [`FileFormatError`].
-    ///
-    /// [`FileFormatError`]: KuiperError::FileFormatError
-    #[must_use]
-    pub fn is_file_format_error(&self) -> bool {
-        matches!(self, Self::FileFormatError)
-    }
 }
 
 impl Error for KuiperError {}
@@ -355,8 +344,7 @@ mod tests {
 
     #[test]
     fn root_request_test() {
-        let request_file = RequestFile::find("requests/request_in_root.kuiper").unwrap();
-        let request = Request::try_from(request_file).unwrap();
+        let request = Request::from_file("requests/request_in_root.kuiper").unwrap();
         assert_eq!(request.uri(), "http://www.example.com");
         let expected_headers: Headers = [
             ("root_header_1", Some("root_value_1")),
@@ -372,8 +360,7 @@ mod tests {
 
     #[test]
     fn subdir_request_test() {
-        let request_file = RequestFile::find("requests/subdir/request_in_subdir.kuiper").unwrap();
-        let request = Request::try_from(request_file).unwrap();
+        let request = Request::from_file("requests/subdir/request_in_subdir.kuiper").unwrap();
         assert_eq!(request.uri(), "http://localhost/api/user/1");
         let expected_headers: Headers = [
             ("root_header_1", Some("root_value_1")),
@@ -395,8 +382,7 @@ mod tests {
     #[test]
     fn interpolation_test() {
         dotenv::from_path("requests/example.env").unwrap();
-        let request_file = RequestFile::find("requests/interpolation.kuiper").unwrap();
-        let interpolated_request = Request::try_from(request_file).unwrap();
+        let interpolated_request = Request::from_file("requests/interpolation.kuiper").unwrap();
 
         assert_eq!(interpolated_request.params.len(), 3);
         assert_eq!(interpolated_request.params["env_1"], "123");
@@ -421,6 +407,16 @@ mod tests {
         .map(|(k, v)| (k.to_string(), v.map(|v| v.to_string())))
         .collect();
         assert_hash_map_eq(&interpolated_request.headers, &expected_headers);
+    }
+
+    #[test]
+    fn body_interpolation_test() {
+        dotenv::from_path("requests/example.env").unwrap();
+        let request = Request::from_file("requests/subdir/request_in_subdir.kuiper").unwrap();
+        let body = request.body().unwrap();
+
+        let s = String::from_utf8(body.to_vec()).unwrap();
+        assert!(s.contains("12345"));
     }
 
     #[test]

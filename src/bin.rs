@@ -44,17 +44,19 @@ fn main() {
             }
 
             pretty_env_logger::init_timed();
-            match lib::RequestFile::find(existing_path.clone()) {
-                Ok(request) => match Request::try_from(request) {
-                    Ok(r) => send_request(r),
-                    Err(e) => eprintln!("failed to parse request file: '{}'", e),
-                },
+            match lib::Request::from_file(existing_path.clone()) {
+                Ok(request) => send_request(request),
                 Err(e) => {
                     eprintln!("failed to parse request with name: {existing_path:?}: '{e}'");
                 }
             }
         }
-        Err(_) => {}
+        Err(e) => {
+            eprintln!(
+                "failed to find request at path: '{:?}', error: {}",
+                file_path, e
+            );
+        }
     }
 }
 

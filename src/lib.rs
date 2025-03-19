@@ -130,7 +130,6 @@ fn interpolation_prompt(name: &str) -> KuiperResult<String> {
     print!("enter a value for '{}'... ", name);
     std::io::stdout().flush()?;
     let mut buf = String::new(); // TODO: capacity
-                                 //stdin().read_line
     stdin().read_to_string(&mut buf)?;
     println!();
     Ok(buf)

@@ -12,6 +12,9 @@ struct Args {
     /// Specify this argument to start request evaluation from this directory.
     #[arg(short)]
     dir: Option<PathBuf>,
+    /// Disable interpolation. This is 'false' by default (interpolation is enabled).
+    #[arg(short, long, default_value = "false")]
+    no_interpolation: bool,
 }
 
 fn main() {
@@ -19,6 +22,7 @@ fn main() {
         path,
         env_file,
         dir,
+        no_interpolation,
     } = Args::parse();
 
     if let Some(env_file) = env_file {
@@ -44,7 +48,7 @@ fn main() {
             }
 
             pretty_env_logger::init_timed();
-            match lib::Request::from_file(existing_path.clone()) {
+            match lib::Request::from_file(existing_path.clone(), !no_interpolation) {
                 Ok(request) => send_request(request),
                 Err(e) => {
                     eprintln!("failed to parse request with name: {existing_path:?}: '{e}'");

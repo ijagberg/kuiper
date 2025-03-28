@@ -1,5 +1,6 @@
 use clap::Parser;
 use lib::Request;
+use log::trace;
 use reqwest::Method;
 use std::{path::PathBuf, str::FromStr};
 
@@ -80,7 +81,7 @@ fn send_request(req: Request) {
     }
 
     let request = request.build().unwrap();
-
+    trace!("sending request to '{}'", request.url());
     let response = client.execute(request).unwrap();
 
     println!("{}", response.status());

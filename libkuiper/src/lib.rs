@@ -127,7 +127,7 @@ fn interpolate_str(input: &str) -> KuiperResult<String> {
 fn interpolation_prompt(name: &str) -> KuiperResult<String> {
     print!("enter a value for '{}'... ", name);
     std::io::stdout().flush()?;
-    let mut buf = String::new(); // TODO: capacity
+    let mut buf = String::with_capacity(1024);
     stdin().read_to_string(&mut buf)?;
     println!();
     Ok(buf)
@@ -184,7 +184,7 @@ impl Request {
 
         let mut request = Request::new(uri, headers, params, method, None);
         if let Some(mut f) = body_file {
-            let mut buf = String::new(); // TODO: capacity
+            let mut buf = String::with_capacity(1024);
             f.read_to_string(&mut buf)?;
             let body_interp = interpolate_str(&buf)?;
             request.body = Some(body_interp.into_bytes().into());
@@ -220,7 +220,6 @@ fn overwrite_headers(path: &Path, headers: &mut Headers) -> KuiperResult<()> {
             let reader = BufReader::new(file);
             let file_headers: Headers = serde_json::from_reader(reader)?;
             for (name, value) in file_headers {
-                // TODO: handle interpolation
                 headers.insert(name.to_owned(), value.to_owned());
             }
         }
@@ -352,7 +351,7 @@ mod tests {
 
     #[test]
     fn root_request_test() {
-        let request = Request::from_file("requests/request_in_root.kuiper", true).unwrap();
+        let request = Request::from_file("../requests/request_in_root.kuiper", true).unwrap();
         assert_eq!(request.uri(), "http://www.example.com");
         let expected_headers: Headers = [
             ("root_header_1", Some("root_value_1")),
@@ -368,7 +367,8 @@ mod tests {
 
     #[test]
     fn subdir_request_test() {
-        let request = Request::from_file("requests/subdir/request_in_subdir.kuiper", true).unwrap();
+        let request =
+            Request::from_file("../requests/subdir/request_in_subdir.kuiper", true).unwrap();
         assert_eq!(request.uri(), "http://localhost/api/user/1");
         let expected_headers: Headers = [
             ("root_header_1", Some("root_value_1")),
@@ -389,9 +389,9 @@ mod tests {
 
     #[test]
     fn interpolation_test() {
-        dotenv::from_path("requests/example.env").unwrap();
+        dotenv::from_path("../requests/example.env").unwrap();
         let interpolated_request =
-            Request::from_file("requests/interpolation.kuiper", true).unwrap();
+            Request::from_file("../requests/interpolation.kuiper", true).unwrap();
 
         assert_eq!(interpolated_request.params.len(), 3);
         assert_eq!(interpolated_request.params["env_1"], "123");
@@ -420,8 +420,9 @@ mod tests {
 
     #[test]
     fn body_interpolation_test() {
-        dotenv::from_path("requests/example.env").unwrap();
-        let request = Request::from_file("requests/subdir/request_in_subdir.kuiper", true).unwrap();
+        dotenv::from_path("../requests/example.env").unwrap();
+        let request =
+            Request::from_file("../requests/subdir/request_in_subdir.kuiper", true).unwrap();
         let body = request.body().unwrap();
 
         let s = String::from_utf8(body.to_vec()).unwrap();

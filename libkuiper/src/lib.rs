@@ -4,7 +4,6 @@ use log::{error, trace};
 use serde::Deserialize;
 use std::{
     collections::{hash_map::Entry, HashMap},
-    error::Error,
     fmt::Display,
     fs::File,
     io::{stdin, BufReader, Read, Write},
@@ -14,7 +13,7 @@ use uuid::Uuid;
 
 pub type Headers = HashMap<String, Option<String>>;
 pub type Params = HashMap<String, String>;
-pub type KuiperResult<T> = Result<T, KuiperError>;
+pub type KuiperResult<T> = Result<T, Error>;
 
 #[derive(Deserialize, Debug)]
 struct RequestFile {
@@ -58,7 +57,7 @@ impl RequestFile {
     /// Parse a `RequestFile` from the given path.
     fn from_file(path: &Path) -> KuiperResult<Self> {
         let file = File::open(path).map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => KuiperError::RequestNotFound,
+            std::io::ErrorKind::NotFound => Error::RequestNotFound,
             _ => e.into(),
         })?;
         let reader = BufReader::new(file);
@@ -138,7 +137,7 @@ fn interpolation_expr(expr: &str) -> KuiperResult<String> {
     match expr {
         "uuid" => Ok(Uuid::new_v4().to_string()),
         "now" => Ok(Timestamp::now().to_string()),
-        invalid => Err(KuiperError::InvalidExpr(invalid.to_string())),
+        invalid => Err(Error::InvalidExpr(invalid.to_string())),
     }
 }
 
@@ -227,7 +226,7 @@ fn overwrite_headers(path: &Path, headers: &mut Headers) -> KuiperResult<()> {
         }
         Err(e) => match e.kind() {
             std::io::ErrorKind::NotFound => return Ok(()),
-            _ => return Err(KuiperError::IoError(e)),
+            _ => return Err(Error::IoError(e)),
         },
     }
     trace!("successfully parsed headers at '{path:?}");
@@ -236,7 +235,7 @@ fn overwrite_headers(path: &Path, headers: &mut Headers) -> KuiperResult<()> {
 
 /// Various errors that can occur.
 #[derive(Debug)]
-pub enum KuiperError {
+pub enum Error {
     /// IO error.
     IoError(std::io::Error),
     /// JSON error.
@@ -252,40 +251,39 @@ pub enum KuiperError {
     InterpolationError(InterpolationError),
 }
 
-impl Error for KuiperError {}
+impl std::error::Error for Error {}
 
-impl Display for KuiperError {
+impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{}",
             match self {
-                KuiperError::IoError(error) => format!("I/O error: {error}"),
-                KuiperError::JsonError(error) => format!("JSON error: {error}"),
-                KuiperError::RequestNotFound => "request not found".to_string(),
-                KuiperError::InterpolationError(error) =>
-                    format!("interpolation error '{}'", error),
-                KuiperError::FileFormatError => "file format error".to_string(),
-                KuiperError::PathError => "path error".to_string(),
-                KuiperError::InvalidExpr(expr) => format!("invalid expr: '{}'", expr),
+                Error::IoError(error) => format!("I/O error: {error}"),
+                Error::JsonError(error) => format!("JSON error: {error}"),
+                Error::RequestNotFound => "request not found".to_string(),
+                Error::InterpolationError(error) => format!("interpolation error '{}'", error),
+                Error::FileFormatError => "file format error".to_string(),
+                Error::PathError => "path error".to_string(),
+                Error::InvalidExpr(expr) => format!("invalid expr: '{}'", expr),
             }
         )
     }
 }
 
-impl From<std::io::Error> for KuiperError {
+impl From<std::io::Error> for Error {
     fn from(value: std::io::Error) -> Self {
         Self::IoError(value)
     }
 }
 
-impl From<serde_json::Error> for KuiperError {
+impl From<serde_json::Error> for Error {
     fn from(value: serde_json::Error) -> Self {
         Self::JsonError(value)
     }
 }
 
-impl From<InterpolationError> for KuiperError {
+impl From<InterpolationError> for Error {
     fn from(value: InterpolationError) -> Self {
         Self::InterpolationError(value)
     }
@@ -300,7 +298,7 @@ pub enum InterpolationError {
     InvalidFormat,
 }
 
-impl Error for InterpolationError {}
+impl std::error::Error for InterpolationError {}
 
 impl Display for InterpolationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -434,7 +432,7 @@ mod tests {
     fn interpolation_error_test() {
         let result = interpolate_str("asd{{env:{{env:abc}}");
         assert!(
-            matches!(&result, Err(KuiperError::InterpolationError(InterpolationError::MissingEnvVar(var))) if var == "{{env:abc"),
+            matches!(&result, Err(Error::InterpolationError(InterpolationError::MissingEnvVar(var))) if var == "{{env:abc"),
             "{:?}",
             result
         );
@@ -443,9 +441,7 @@ mod tests {
         assert!(
             matches!(
                 &result,
-                Err(KuiperError::InterpolationError(
-                    InterpolationError::InvalidFormat
-                ))
+                Err(Error::InterpolationError(InterpolationError::InvalidFormat))
             ),
             "{:?}",
             result

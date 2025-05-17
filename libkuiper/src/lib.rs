@@ -75,7 +75,7 @@ impl RequestFile {
 
 fn interpolate_params(params: &mut Params) -> KuiperResult<()> {
     for (_, value) in params.iter_mut() {
-        let new_value = interpolate_str(&value)?;
+        let new_value = interpolate_str(value)?;
         *value = new_value;
     }
     Ok(())

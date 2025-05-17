@@ -31,12 +31,12 @@ fn main() {
     if let Err(e) = run_main(args) {
         error!("{}", e);
         match e {
-            Error::KuiperLibError(kuiper_error) => eprintln!("{}", kuiper_error),
-            Error::ReqwestError(_) => eprintln!("error sending request",),
-            Error::DotenvError(_) => {
+            Error::KuiperLib(kuiper_error) => eprintln!("{}", kuiper_error),
+            Error::Reqwest(_) => eprintln!("error sending request",),
+            Error::Dotenv(_) => {
                 eprintln!("could not read env file")
             }
-            Error::IoError(_) => eprintln!("I/O error"),
+            Error::IO(_) => eprintln!("I/O error"),
         }
     }
 }
@@ -104,10 +104,10 @@ fn send_request(req: Request) -> Result<Response, Error> {
 
 #[derive(Debug)]
 enum Error {
-    KuiperLibError(KuiperLibError),
-    ReqwestError(reqwest::Error),
-    DotenvError(dotenv::Error),
-    IoError(std::io::Error),
+    KuiperLib(KuiperLibError),
+    Reqwest(reqwest::Error),
+    Dotenv(dotenv::Error),
+    IO(std::io::Error),
 }
 
 impl std::error::Error for Error {}
@@ -118,11 +118,10 @@ impl Display for Error {
             f,
             "{}",
             match self {
-                Error::KuiperLibError(kuiper_error) =>
-                    format!("kuiper lib error: '{}'", kuiper_error),
-                Error::ReqwestError(error) => format!("reqwest error: '{}'", error),
-                Error::DotenvError(error) => format!("dotenv error: '{}'", error),
-                Error::IoError(error) => format!("I/O error: '{}'", error),
+                Error::KuiperLib(kuiper_error) => format!("kuiper lib error: '{}'", kuiper_error),
+                Error::Reqwest(error) => format!("reqwest error: '{}'", error),
+                Error::Dotenv(error) => format!("dotenv error: '{}'", error),
+                Error::IO(error) => format!("I/O error: '{}'", error),
             }
         )
     }
@@ -130,24 +129,24 @@ impl Display for Error {
 
 impl From<KuiperLibError> for Error {
     fn from(value: KuiperLibError) -> Self {
-        Self::KuiperLibError(value)
+        Self::KuiperLib(value)
     }
 }
 
 impl From<reqwest::Error> for Error {
     fn from(value: reqwest::Error) -> Self {
-        Self::ReqwestError(value)
+        Self::Reqwest(value)
     }
 }
 
 impl From<dotenv::Error> for Error {
     fn from(value: dotenv::Error) -> Self {
-        Self::DotenvError(value)
+        Self::Dotenv(value)
     }
 }
 
 impl From<io::Error> for Error {
     fn from(value: io::Error) -> Self {
-        Self::IoError(value)
+        Self::IO(value)
     }
 }

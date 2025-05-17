@@ -2,7 +2,7 @@
 name = "kuiper"
 description = "An easy-to-use HTTP integration testing tool"
 version = "0.0.7"
-edition = "2021"
+edition = "2024"
 authors = ["Isak Jägberg <ijagberg@gmail.com>"]
 license = "MIT"
 keywords = ["postman", "integration", "requests"]

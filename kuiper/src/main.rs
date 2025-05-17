@@ -1,7 +1,7 @@
 use clap::Parser;
 use libkuiper::{Error as KuiperLibError, Request};
 use log::{error, trace};
-use reqwest::{blocking::Response, Method};
+use reqwest::{Method, blocking::Response};
 use std::{fmt::Display, io, path::PathBuf, str::FromStr};
 
 /// Arguments for the `kuiper` cli.
@@ -26,9 +26,7 @@ fn main() {
     // Trigger a rebuild when any change is made to Cargo.toml, to make sure the --version argument
     // will output the correct value.
     include_str!("../Cargo.toml");
-    if std::env::var("RUST_LOG").is_err() {
-        std::env::set_var("RUST_LOG", "info,kuiper_lib=trace");
-    }
+
     pretty_env_logger::init_timed();
 
     let args = Args::parse();

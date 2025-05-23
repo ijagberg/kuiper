@@ -699,16 +699,28 @@ checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 
 [[package]]
 name = "jiff"
-version = "0.1.29"
+version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c04ef77ae73f3cf50510712722f0c4e8b46f5aaa1bf5ffad2ae213e6495e78e5"
+checksum = "f02000660d30638906021176af16b17498bd0d12813dbfe7b276d8bc7f3c0806"
 dependencies = [
+ "jiff-static",
  "jiff-tzdb-platform",
  "log",
  "portable-atomic",
  "portable-atomic-util",
  "serde",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "jiff-static"
+version = "0.2.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3c30758ddd7188629c6713fc45d1188af4f44c90582311d0c8d8c9907f60c48"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -740,12 +752,17 @@ dependencies = [
 name = "kuiper"
 version = "0.0.7"
 dependencies = [
+ "bytes",
  "clap",
  "dotenv",
- "libkuiper 0.0.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "jiff",
  "log",
  "pretty_env_logger",
  "reqwest",
+ "serde",
+ "serde_json",
+ "test-log",
+ "uuid",
 ]
 
 [[package]]
@@ -759,34 +776,6 @@ name = "libc"
 version = "0.2.172"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d750af042f7ef4f724306de029d18836c26c1765a54a6a3f094cbd23a7267ffa"
-
-[[package]]
-name = "libkuiper"
-version = "0.0.7"
-dependencies = [
- "bytes",
- "dotenv",
- "jiff",
- "log",
- "serde",
- "serde_json",
- "test-log",
- "uuid",
-]
-
-[[package]]
-name = "libkuiper"
-version = "0.0.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b7d0d241283a09a4e45ce066eb151e206a44a5b6c1870120f7359ee6237c3be"
-dependencies = [
- "bytes",
- "jiff",
- "log",
- "serde",
- "serde_json",
- "uuid",
-]
 
 [[package]]
 name = "linux-raw-sys"

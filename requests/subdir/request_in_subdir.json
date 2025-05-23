@@ -5,5 +5,5 @@
   "headers": {
     "request_specific_header_1": "request_specific_header_value_1"
   },
-  "body":   "body.json"
+  "body": "body"
 }

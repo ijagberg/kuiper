@@ -99,7 +99,7 @@ impl Display for InterpolationError {
             "{}",
             match self {
                 InterpolationError::InvalidExpr(e) => format!("invalid expr: '{}'", e),
-                InterpolationError::InvalidFormat => format!("invalid format"),
+                InterpolationError::InvalidFormat => "invalid format".to_string(),
                 InterpolationError::MissingEnvVar(e) => format!("missing env var: '{}", e),
             }
         )
@@ -108,9 +108,8 @@ impl Display for InterpolationError {
 
 #[cfg(test)]
 mod tests {
-    use crate::Error;
-
     use super::*;
+    use crate::Error;
 
     #[test]
     fn interpolation_error_test() {

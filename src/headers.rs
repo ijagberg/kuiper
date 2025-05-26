@@ -18,6 +18,12 @@ impl Headers {
     }
 }
 
+impl Default for Headers {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Deref for Headers {
     type Target = HashMap<String, Option<String>>;
 
@@ -86,7 +92,7 @@ pub fn get_headers(
     }
 
     // 2
-    overwrite_headers(&request_file_headers, &mut final_headers);
+    overwrite_headers(request_file_headers, &mut final_headers);
 
     // 3
     if let Some(header_files) = header_files {

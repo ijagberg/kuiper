@@ -22,6 +22,12 @@ impl Params {
     }
 }
 
+impl Default for Params {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Deref for Params {
     type Target = HashMap<String, String>;
 

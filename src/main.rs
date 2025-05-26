@@ -22,6 +22,7 @@ pub(crate) mod params;
 pub(crate) mod request;
 
 type KuiperResult<T> = Result<T, Error>;
+
 /// Arguments for the `kuiper` cli.
 #[derive(clap::Parser)]
 #[command(version, about)]
@@ -109,7 +110,7 @@ fn run_main(
 
 fn get_canon_file_path(dir: Option<PathBuf>, path: &String) -> KuiperResult<PathBuf> {
     let mut file_path = PathBuf::new();
-    file_path.push(&path);
+    file_path.push(path);
     let dir = dir.unwrap_or(std::env::current_dir()?);
     file_path = dir.join(file_path);
     if file_path.is_relative() {
@@ -213,12 +214,12 @@ fn build_request(
         mut params,
     } = get_request_file(canon_file_path)?;
 
-    // evaluate headers from root to request, plus additional header files
+    // Evaluate headers from root to request, plus additional header files
     let mut headers = headers::get_headers(canon_file_path, &headers, header_files)?;
 
     let body = if let Some(bp) = body_file {
         let mut b = canon_file_path.to_path_buf();
-        b.pop(); // remove the request file 
+        b.pop(); // Remove the request file 
         b.push(bp);
         body::get_body(&b)?
     } else {
@@ -238,7 +239,7 @@ fn build_request(
     Ok(FinishedRequest::new(
         uri,
         Method::from_str(&method).unwrap(),
-        params.into(),
+        params,
         headers,
         body_bytes,
     ))
@@ -386,6 +387,7 @@ mod tests {
     #[test]
     fn subdir_request_test() {
         dotenv::from_path("requests/example.env").unwrap();
+
         let request_path = "requests/subdir/request_in_subdir.json";
         let request = build_request(request_path, None, true).unwrap();
 
@@ -412,12 +414,14 @@ mod tests {
     #[test]
     fn interpolation_test() {
         dotenv::from_path("requests/example.env").unwrap();
+
         let interpolated_request =
             build_request("requests/interpolation.json", None, true).unwrap();
 
         assert_eq!(interpolated_request.params().len(), 3);
         assert_eq!(interpolated_request.params()["env_1"], "123");
-        // a new Uuid is generated every time the test is ran,
+
+        // A new Uuid is generated every time the test is ran,
         // so just assert that it is a Uuids
         assert!(
             interpolated_request.params()["expr_uuid"]
@@ -447,14 +451,15 @@ mod tests {
     #[test]
     fn additional_header_file_test() {
         dotenv::from_path("requests/example.env").unwrap();
-        let request_path = "requests/subdir/request_in_subdir.json";
-        let request = build_request(
-            request_path,
-            Some(vec!["requests/additional_header_file.json".to_string()]),
-            true,
-        )
-        .unwrap();
 
+        let request_path = "requests/subdir/request_in_subdir.json";
+        let additional_header = "requests/additional_header_file.json".to_string();
+
+        let request = build_request(request_path, Some(vec![additional_header]), true).unwrap();
+
+        // The request should have the "additional_header",
+        // but _not_ have the "root_header_3", since that is disabled in the additional header
+        // file.
         let expected = FinishedRequest::new(
             "http://localhost/api/user/1".to_string(),
             reqwest::Method::GET,
@@ -462,7 +467,6 @@ mod tests {
             make_headers([
                 ("root_header_1", Some("root_value_1")),
                 ("root_header_2", Some("subdir_value_2")),
-                ("root_header_3", Some("root_value_3")),
                 ("subdir_header_1", Some("subdir_value_1")),
                 (
                     "request_specific_header_1",

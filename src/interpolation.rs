@@ -100,7 +100,7 @@ impl Display for InterpolationError {
             match self {
                 InterpolationError::InvalidExpr(e) => format!("invalid expr: '{}'", e),
                 InterpolationError::InvalidFormat => "invalid format".to_string(),
-                InterpolationError::MissingEnvVar(e) => format!("missing env var: '{}", e),
+                InterpolationError::MissingEnvVar(e) => format!("missing env var: '{}'", e),
             }
         )
     }

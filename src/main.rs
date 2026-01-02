@@ -339,7 +339,13 @@ mod tests {
         K: Hash + Eq + Debug,
         V: Debug + PartialEq,
     {
-        assert_eq!(left.len(), right.len());
+        assert_eq!(
+            left.len(),
+            right.len(),
+            "left: {:#?}, right: {:#?}",
+            left,
+            right
+        );
         for (left_key, left_value) in left {
             let (right_key, right_value) = right
                 .get_key_value(left_key)
@@ -473,6 +479,7 @@ mod tests {
                     Some("request_specific_header_value_1"),
                 ),
                 ("additional_header", Some("123")),
+                ("root_header_3", None),
             ]),
             Some("text12345".to_string().into_bytes().into()),
         );

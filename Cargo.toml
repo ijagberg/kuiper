@@ -1,7 +1,7 @@
 [package]
 name = "kuiper"
 description = "An easy-to-use HTTP integration testing tool"
-version = "0.0.8"
+version = "0.0.9"
 edition = "2024"
 authors = ["Isak Jägberg <ijagberg@gmail.com>"]
 license = "MIT"

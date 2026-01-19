@@ -750,7 +750,7 @@ dependencies = [
 
 [[package]]
 name = "kuiper"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "bytes",
  "clap",

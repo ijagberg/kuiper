@@ -7,7 +7,7 @@ use interpolation::{
 use log::{error, trace};
 use params::Params;
 use request::{RequestFile, get_request_file};
-use reqwest::{Method, blocking::Response};
+use reqwest::{Method, StatusCode, blocking::Response};
 use std::{
     fmt::Display,
     io,
@@ -44,6 +44,9 @@ struct Args {
     /// specified request, and then each header file specified in this argument.
     #[arg(long, short('H'), action = clap::ArgAction::Append)]
     header_files: Option<Vec<String>>,
+    /// If 'false', `kuiper` will omit the status code of the response. This is 'true' by default.
+    #[arg(long, default_value = "true")]
+    show_response_code: bool,
 }
 
 fn main() {
@@ -78,6 +81,7 @@ fn run_main(
         no_interpolation,
         dry_run,
         header_files,
+        show_response_code,
     }: Args,
 ) -> Result<(), Error> {
     if let Some(env_file) = env_file {
@@ -98,7 +102,7 @@ fn run_main(
         );
     } else {
         let response = send_request(request)?;
-        println!("{}", response.status());
+        print_response_status_code(response.status(), show_response_code);
         if let Ok(text) = response.text() {
             println!("{}", text);
         } else {
@@ -106,6 +110,12 @@ fn run_main(
         }
     }
     Ok(())
+}
+
+fn print_response_status_code(status: StatusCode, enabled: bool) {
+    if enabled {
+        println!("{}", status);
+    }
 }
 
 fn get_canon_file_path(dir: Option<PathBuf>, path: &String) -> KuiperResult<PathBuf> {

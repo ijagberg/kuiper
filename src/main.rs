@@ -44,9 +44,9 @@ struct Args {
     /// specified request, and then each header file specified in this argument.
     #[arg(long, short('H'), action = clap::ArgAction::Append)]
     header_files: Option<Vec<String>>,
-    /// If 'false', `kuiper` will omit the status code of the response. This is 'true' by default.
-    #[arg(long, default_value = "true")]
-    show_response_code: bool,
+    /// If 'true', `kuiper` will omit the status code of the response. This is 'false' by default.
+    #[arg(long, default_value = "false")]
+    omit_response_code: bool,
 }
 
 fn main() {
@@ -81,7 +81,7 @@ fn run_main(
         no_interpolation,
         dry_run,
         header_files,
-        show_response_code,
+        omit_response_code,
     }: Args,
 ) -> Result<(), Error> {
     if let Some(env_file) = env_file {
@@ -102,7 +102,7 @@ fn run_main(
         );
     } else {
         let response = send_request(request)?;
-        print_response_status_code(response.status(), show_response_code);
+        print_response_status_code(response.status(), omit_response_code);
         if let Ok(text) = response.text() {
             println!("{}", text);
         } else {

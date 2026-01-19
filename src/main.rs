@@ -102,7 +102,7 @@ fn run_main(
         );
     } else {
         let response = send_request(request)?;
-        print_response_status_code(response.status(), omit_response_code);
+        print_response_status_code(response.status(), !omit_response_code);
         if let Ok(text) = response.text() {
             println!("{}", text);
         } else {
